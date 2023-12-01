@@ -1,7 +1,7 @@
 {
-  "name": "frida-agent-example",
+  "name": "shook",
   "version": "1.0.0",
-  "description": "Example Frida agent written in TypeScript",
+  "description": "Hooks for several evasive techniques",
   "private": true,
   "main": "agent/index.ts",
   "scripts": {
@@ -12,6 +12,6 @@
   "devDependencies": {
     "@types/frida-gum": "^18.1.0",
     "@types/node": "^18.0.6",
-    "frida-compile": "^15.0.8"
+    "frida-compile": "^16.4.1"
   }
 }
