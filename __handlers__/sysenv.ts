@@ -22,6 +22,7 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     let windows_blacklist = [
                          "vbox",
@@ -37,19 +38,27 @@
                          "ida",
                          "wireshark",
                          "procmon",
+                         "filemon",
+                         "regmon",
+                         "netmon",
+                         "processhacker",
                          "process monitor",
                          "fiddler",
                          "apimonitor",
                          "api monitor",
                          "scylla",
                          "debug",
+                         "peid",
+                         "die",
+                         "procdump",
+                         "sandbox"
                         ]
 
     //useful reference for data types sizes: https://learn.microsoft.com/it-it/windows/win32/winprog/windows-data-types
     const IsDebuggerPresent = Module.getExportByName('Kernel32.dll', 'IsDebuggerPresent');
     Interceptor.attach(IsDebuggerPresent, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         retval.replace(ptr(0)); //return FALSE
         send("[System Environment] IsDebuggerPresent");
@@ -63,7 +72,7 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[System Environment] CheckRemoteDebuggerPresent");
         this.debuggerPresent.writeInt(0); //change to FALSE
@@ -77,9 +86,9 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[System Environment] GetComputerNameA - replaced computer name: " + this.computerName.readCString());
+        send("[System Environment] GetComputerName - replaced computer name: " + this.computerName.readCString());
       }
     });
 
@@ -90,9 +99,9 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[System Environment] GetComputerNameW - replaced computer name: " + this.computerName.readUtf16String());
+        send("[System Environment] GetComputerName - replaced computer name: " + this.computerName.readUtf16String());
       }
     });
 
@@ -103,9 +112,9 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[System Environment] GetUserNameA - replaced username: " + this.userName.readCString());
+        send("[System Environment] GetUserName - replaced username: " + this.userName.readCString());
       }
     });
 
@@ -116,16 +125,16 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[System Environment] GetUserNameW - replaced username: " + this.userName.readUtf16String());
+        send("[System Environment] GetUserName - replaced username: " + this.userName.readUtf16String());
       }
     });
 
     const IsNativeVhdBoot = Module.getExportByName('Kernel32.dll', 'IsNativeVhdBoot');
     Interceptor.attach(IsNativeVhdBoot, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         retval.replace(ptr(0)); //return FALSE
         send("[System Environment] IsNativeVhdBoot");
@@ -135,18 +144,18 @@
     const FindWindowA = Module.getExportByName('User32.dll', 'FindWindowA');
     Interceptor.attach(FindWindowA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        let checked_windowClass = args[0].readCString();
+        let checked_windowClass = args[0].readAnsiString();
         console.log('Window class checked:', checked_windowClass);
-        let checked_windowName = args[1].readCString();
+        let checked_windowName = args[1].readAnsiString();
         console.log('Window name checked:', checked_windowName);
         let to_check1 = checked_windowClass !== null ? checked_windowClass.toLowerCase() : '0123456789';
         let to_check2 = checked_windowName !== null ? checked_windowName.toLowerCase() : '0123456789';
         for (let w of windows_blacklist) {
             if (to_check1.includes(w))
             {
-                send("[System Environment] FindWindowA - window checked: " + checked_windowClass);
+                send("[System Environment] FindWindow - window checked: " + checked_windowClass);
                 //replace the window's name if blacklisted
                 const dummyWindow = Memory.allocUtf8String('meow');
                 this.dummyWindow = dummyWindow;
@@ -154,7 +163,7 @@
             }    
             if (to_check2.includes(w))
             {
-                send("[System Environment] FindWindowA - window checked: " + checked_windowName);
+                send("[System Environment] FindWindow - window checked: " + checked_windowName);
                 //replace the window's name if blacklisted
                 const dummyWindow = Memory.allocUtf8String('meow');
                 this.dummyWindow = dummyWindow;
@@ -164,10 +173,42 @@
       }
     });
 
+    const FindWindowExA = Module.getExportByName('User32.dll', 'FindWindowExA');
+    Interceptor.attach(FindWindowExA, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        let checked_windowClass = args[2].readAnsiString();
+        console.log('Window class checked:', checked_windowClass);
+        let checked_windowName = args[3].readAnsiString();
+        console.log('Window name checked:', checked_windowName);
+        let to_check1 = checked_windowClass !== null ? checked_windowClass.toLowerCase() : '0123456789';
+        let to_check2 = checked_windowName !== null ? checked_windowName.toLowerCase() : '0123456789';
+        for (let w of windows_blacklist) {
+            if (to_check1.includes(w))
+            {
+                send("[System Environment] FindWindow - window checked: " + checked_windowClass);
+                //replace the window's name if blacklisted
+                const dummyWindow = Memory.allocUtf8String('meow');
+                this.dummyWindow = dummyWindow;
+                args[2] = dummyWindow;
+            }    
+            if (to_check2.includes(w))
+            {
+                send("[System Environment] FindWindow - window checked: " + checked_windowName);
+                //replace the window's name if blacklisted
+                const dummyWindow = Memory.allocUtf8String('meow');
+                this.dummyWindow = dummyWindow;
+                args[3] = dummyWindow;
+            }        
+        }
+      }
+    });
+
     const FindWindowW = Module.getExportByName('User32.dll', 'FindWindowW');
     Interceptor.attach(FindWindowW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_windowClass = args[0].readUtf16String();
         console.log('Window class checked:', checked_windowClass);
@@ -178,7 +219,7 @@
         for (let w of windows_blacklist) {
             if (to_check1.includes(w))
             {
-                send("[System Environment] FindWindowW - window checked: " + checked_windowClass);
+                send("[System Environment] FindWindow - window checked: " + checked_windowClass);
                 //replace the window's name if blacklisted
                 const dummyWindow = Memory.allocUtf16String('meow');
                 this.dummyWindow = dummyWindow;
@@ -186,11 +227,43 @@
             }    
             if (to_check2.includes(w))
             {
-                send("[System Environment] FindWindowW - window checked: " + checked_windowName);
+                send("[System Environment] FindWindow - window checked: " + checked_windowName);
                 //replace the window's name if blacklisted
                 const dummyWindow = Memory.allocUtf16String('meow');
                 this.dummyWindow = dummyWindow;
                 args[1] = dummyWindow;
+            }        
+        }
+      }
+    });
+
+    const FindWindowExW = Module.getExportByName('User32.dll', 'FindWindowExW');
+    Interceptor.attach(FindWindowExW, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        let checked_windowClass = args[2].readUtf16String();
+        console.log('Window class checked:', checked_windowClass);
+        let checked_windowName = args[3].readUtf16String();
+        console.log('Window name checked:', checked_windowName);
+        let to_check1 = checked_windowClass !== null ? checked_windowClass.toLowerCase() : '0123456789';
+        let to_check2 = checked_windowName !== null ? checked_windowName.toLowerCase() : '0123456789';
+        for (let w of windows_blacklist) {
+            if (to_check1.includes(w))
+            {
+                send("[System Environment] FindWindow - window checked: " + checked_windowClass);
+                //replace the window's name if blacklisted
+                const dummyWindow = Memory.allocUtf16String('meow');
+                this.dummyWindow = dummyWindow;
+                args[2] = dummyWindow;
+            }    
+            if (to_check2.includes(w))
+            {
+                send("[System Environment] FindWindow - window checked: " + checked_windowName);
+                //replace the window's name if blacklisted
+                const dummyWindow = Memory.allocUtf16String('meow');
+                this.dummyWindow = dummyWindow;
+                args[3] = dummyWindow;
             }        
         }
       }
@@ -204,7 +277,7 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (this.checkedFeature === 3 || this.checkedFeature === 6 || this.checkedFeature === 17)
         {
@@ -239,8 +312,8 @@
       },
   
       onLeave() {
-          if (!appModules.has(this.returnAddress))
-          return;
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
           send("[System Environment] GetSystemInfo - original processors count: " + this.numProcessors.readUInt());
           this.numProcessors.writeUInt(8);
           //console.log(this.numProcessors.readUInt());
@@ -253,10 +326,10 @@
         this.versionMajorNumber = args[0].add(4); //DWORD dwMajorVersion
       },   
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
-        this.versionMajorNumber.writeUInt(10); //Windows 10
-        send("[System Environment] GetVersionExA");
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.versionMajorNumber.writeUInt(4); //Windows 10
+        send("[System Environment] GetVersion");
         //console.log(this.versionMajorNumber.readInt());
       }
     });
@@ -267,11 +340,25 @@
         this.versionMajorNumber = args[0].add(4); //DWORD dwMajorVersion
       },  
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         this.versionMajorNumber.writeUInt(10); //Windows 10
-        send("[System Environment] GetVersionExW");
+        send("[System Environment] GetVersion");
         //console.log(this.versionMajorNumber.readInt());
+      }
+    });
+
+    const GlobalMemoryStatus = Module.getExportByName('Kernel32.dll', 'GlobalMemoryStatus');
+    Interceptor.attach(GlobalMemoryStatus, {
+      onEnter(args) {
+        this.physicalMemory = args[0].add(8); //SIZE_T dwTotalPhys (ulong)
+      },  
+      onLeave() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.physicalMemory.writeULong(4294967295); //fake memory size
+        send("[System Environment] GlobalMemoryStatus");
+        //console.log(this.physicalMemory.readULong());
       }
     });
 
@@ -280,15 +367,12 @@
       onEnter(args) {
         this.physicalMemory = args[0].add(8); //DWORDLONG ullTotalPhys (ulong)
       },  
-      onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-          return;
-        if (retval.toInt32() !== 0)
-        {
-          this.physicalMemory.writeULong(4294967295); //fake memory size
-          send("[System Environment] GlobalMemoryStatusEx");
-          console.log(this.physicalMemory.readULong());
-        }
+      onLeave() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.physicalMemory.writeULong(4294967295); //fake memory size
+        send("[System Environment] GlobalMemoryStatus");
+        //console.log(this.physicalMemory.readULong());
       }
     });
 
@@ -315,14 +399,14 @@
           LONGLONG QuadPart;
         } LARGE_INTEGER; */
       onLeave() {
-          if (!appModules.has(this.returnAddress))
-              return;
-          if (this.controlCode === 475228) //IOCTL_DISK_GET_LENGTH_INFO constant
-          {
-            this.diskSpace.writeLong(4294967295); //fake disk space
-            send("[System Environment] DeviceIoControl(DISK_INFO)");
-            console.log(this.diskSpace.readLong());
-          }
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        if (this.controlCode === 475228) //IOCTL_DISK_GET_LENGTH_INFO constant
+        {
+          this.diskSpace.writeLong(4294967295); //fake disk space
+          send("[System Environment] DeviceIoControl(DISK_INFO)");
+          console.log(this.diskSpace.readLong());
+        }
       }
     });
 
@@ -332,26 +416,32 @@
         this.index = args[0].toInt32(); //int nIndex (SM_CXSCREEN=0, SM_CYSCREEN=1, SM_CLEANBOOT=67)
       },  
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         if (this.index === 0)
+        {
           retval.replace(ptr(1280)); //fake x resolution
-          send("[System Environment] GetSystemMetrics(SM_CXSCREEN)");
+          send("[System Environment] GetSystemMetrics");
+        }
         if (this.index === 1)
+        {
           retval.replace(ptr(720)); //fake y resolution
-          send("[System Environment] GetSystemMetrics(SM_CYSCREEN)");
+          send("[System Environment] GetSystemMetrics");
+        }
         if (this.index === 67)
+        {
           retval.replace(ptr(1)); //fake normal/clean boot
-          send("[System Environment] GetSystemMetrics(SM_CLEANBOOT)");
+          send("[System Environment] GetSystemMetrics");
+        }
       }
     });
 
     const GetDesktopWindow = Module.getExportByName('User32.dll', 'GetDesktopWindow');
     Interceptor.attach(GetDesktopWindow, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[System Environment] GetDesktopWindow");
+        console.log("[System Environment] GetDesktopWindow");
       }
     });
 
@@ -363,9 +453,9 @@
         this.bottom = args[1].add(12); //LONG bottom
       },  
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
-        send("[System Environment] GetWindowRect");
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        send("[System Environment] GetDesktopWindowRect");
         this.right.writeInt(1280); //fake x resolution
         this.bottom.writeInt(720); //fake y resolution
         //console.log(this.right.readInt());
@@ -397,8 +487,8 @@
         this.systemAffinityMask = args[2]; //PDWORD_PTR lpSystemAffinityMask
       },  
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[System Environment] GetProcessAffinityMask");
         this.systemAffinityMask.writePointer(ptr("0x11111111")); //fake 8 cores
       }
@@ -407,7 +497,7 @@
     const EnumDisplayMonitors = Module.getExportByName("User32.dll", 'EnumDisplayMonitors');
     Interceptor.attach(EnumDisplayMonitors, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[System Environment] EnumDisplayMonitors");
       }
@@ -416,7 +506,7 @@
     const EnumWindows = Module.getExportByName('User32.dll', 'EnumWindows');
     Interceptor.attach(EnumWindows, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[System Environment] EnumWindows");
       }
@@ -429,45 +519,45 @@
         "vmacthlp",
         "vmtoolsd",
         "ollydbg",					 // OllyDebug debugger
-		"processhacker",			 // Process Hacker
-		"tcpview",					 // Part of Sysinternals Suite
-		"autoruns",					 // Part of Sysinternals Suite
-		//"autorunsc",				 // Part of Sysinternals Suite
-		"filemon",					 // Part of Sysinternals Suite
-		"procmon",					 // Part of Sysinternals Suite
-		"regmon",					 // Part of Sysinternals Suite
-		"procexp",					 // Part of Sysinternals Suite
-		"ida",						 // IDA Pro Interactive Disassembler
-		//"idaq64",					 // IDA Pro Interactive Disassembler
-		"immunitydebugger",			 // ImmunityDebugger
-		"wireshark",				 // Wireshark packet sniffer
-		"dumpcap",					 // Network traffic dump tool
-		"hookexplorer",				 // Find various types of runtime hooks
-		"importrec",				 // Import Reconstructor
-		"petools",					 // PE Tool
-		"lordpe",					 // LordPE
-		"sysinspector",				 // ESET SysInspector
-		"proc_analyzer",			 // Part of SysAnalyzer iDefense
-		"sysanalyzer",				 // Part of SysAnalyzer iDefense
-		"sniff_hit",				 // Part of SysAnalyzer iDefense
-		"windbg",					 // Microsoft WinDbg
-		"joebox",                    // Joe Sandbox
-		"resourcehacker",			 // Resource Hacker
-		"x32dbg",					 // x32dbg
-		"x64dbg",					 // x64dbg
-		"fiddler",					 // Fiddler
-		"httpdebugger",				 // Http Debugger
-		"netmon",					 // Part of Sysinternals Suite
+        "processhacker",			 // Process Hacker
+        "tcpview",					 // Part of Sysinternals Suite
+        "autoruns",					 // Part of Sysinternals Suite
+        //"autorunsc",				 // Part of Sysinternals Suite
+        "filemon",					 // Part of Sysinternals Suite
+        "procmon",					 // Part of Sysinternals Suite
+        "regmon",					 // Part of Sysinternals Suite
+        "procexp",					 // Part of Sysinternals Suite
+        "ida",						 // IDA Pro Interactive Disassembler
+        //"idaq64",					 // IDA Pro Interactive Disassembler
+        "immunitydebugger",			 // ImmunityDebugger
+        "wireshark",				 // Wireshark packet sniffer
+        "dumpcap",					 // Network traffic dump tool
+        "hookexplorer",				 // Find various types of runtime hooks
+        "importrec",				 // Import Reconstructor
+        "petools",					 // PE Tool
+        "lordpe",					 // LordPE
+        "sysinspector",				 // ESET SysInspector
+        "proc_analyzer",			 // Part of SysAnalyzer iDefense
+        "sysanalyzer",				 // Part of SysAnalyzer iDefense
+        "sniff_hit",				 // Part of SysAnalyzer iDefense
+        "windbg",					 // Microsoft WinDbg
+        "joebox",                    // Joe Sandbox
+        "resourcehacker",			 // Resource Hacker
+        "x32dbg",					 // x32dbg
+        "x64dbg",					 // x64dbg
+        "fiddler",					 // Fiddler
+        "httpdebugger",				 // Http Debugger
+        "netmon",					 // Part of Sysinternals Suite
         "ghidra",
         "tcpdump",
-		"netstat",					 
-		"cain",						 
-		"httpanalyzerstdv7",
+        "netstat",					 
+        "cain",						 
+        "httpanalyzerstdv7",
         "cheatengine",
         "apimonitor",
         "scylla",	 
-		//"frida-helper-32",
-		//"frida-helper-64",
+        //"frida-helper-32",
+        //"frida-helper-64",
         "frida"
     ];
 
@@ -475,13 +565,14 @@
     const NtQuerySystemInformation = Module.getExportByName('ntdll.dll', 'NtQuerySystemInformation');
     Interceptor.attach(NtQuerySystemInformation, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.sysInfoClass = args[0];
         this.sysInfo = args[1];
         this.spi = false;
         this.kdi = false;
         this.pmi = false;
+        this.fti = false;
 
         if (this.sysInfoClass.toInt32() === 5) //0x05 SystemProcessInformation
             this.spi = true;
@@ -489,10 +580,12 @@
             this.kdi = true;
         if (this.sysInfoClass.toInt32() === 184) //0xB8 SystemPhysicalMemoryInformation
             this.pmi = true;
+        if (this.sysInfoClass.toInt32() === 76) //0x4C SystemFirmwareTableInformation
+            this.fti = true;
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (this.spi)
         {
@@ -508,7 +601,7 @@
                 {
                     if (processName.includes(p))
                     {
-                        send(`[Processes] NtQuerySystemInformation(0x5) - process checked: ${processName}`);
+                        send(`[Processes] NtQuerySystemInformation(0x5) - replaced process: ${processName}`);
                         this.sysInfo.add(NextEntryOffset).add(60).readPointer().writeUtf16String('meow');
                     }
                 }
@@ -530,7 +623,10 @@
 
         //SystemPhysicalMemoryInformation is undocumented, we just log the call without bypassing it
         if (this.pmi)
-            send("[System Environment] NtQuerySystemInformation(0xB8)");
+            send("[System Environment] NtQuerySystemInformation(0xB8) - memory info");
+        //SystemFirmwareTableInformation is undocumented, we just log the call without bypassing it
+        if (this.fti)
+            send("[System Environment] NtQuerySystemInformation(0x4C) - firmware tables");
       }
     });
 
@@ -539,7 +635,7 @@
     const NtCreateDebugObject = Module.getExportByName('ntdll.dll', 'NtCreateDebugObject');
     Interceptor.attach(NtCreateDebugObject, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[System Environment] NtCreateDebugObject");
         totalDebugObjects++;
@@ -549,7 +645,7 @@
     const NtQueryObject = Module.getExportByName('ntdll.dll', 'NtQueryObject');
     Interceptor.attach(NtQueryObject, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.totalObjects = args[2].add(8); //ULONG TotalNumberOfObjects (offset 0x8 on x86, 0x10 on x64)
         if (totalDebugObjects > 0)
@@ -560,6 +656,46 @@
       }
     });
     
+    const GetDiskSpaceInformationA = Module.getExportByName('Kernel32.dll', 'GetDiskSpaceInformationA');
+    Interceptor.attach(GetDiskSpaceInformationA, {
+      onEnter(args) {
+        //DISK_SPACE_INFORMATION *diskSpaceInfo
+        this.availableAllocUnits = args[0].add(8).readULong(); //ULONGLONG ActualAvailableAllocationUnits
+        this.sectorsPerUnit = args[0].add(88).readUInt(); //DWORD SectorsPerAllocationUnit
+        this.bytesPerSector = args[0].add(92).readUInt(); //DWORD BytesPerSector
+      },
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        if (retval.toInt32() !== 0)
+        {
+          this.availableAllocUnits.writeULong(this.availableAllocUnits.readULong() * 5);
+          send("[System Environment] GetDiskSpaceInformation");
+        }
+      }
+    });
+
+    const GetDiskSpaceInformationW = Module.getExportByName('Kernel32.dll', 'GetDiskSpaceInformationW');
+    Interceptor.attach(GetDiskSpaceInformationW, {
+      onEnter(args) {
+        //DISK_SPACE_INFORMATION *diskSpaceInfo
+        this.availableAllocUnits = args[0].add(8).readULong(); //ULONGLONG ActualAvailableAllocationUnits
+        this.sectorsPerUnit = args[0].add(88).readUInt(); //DWORD SectorsPerAllocationUnit
+        this.bytesPerSector = args[0].add(92).readUInt(); //DWORD BytesPerSector
+      },
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        if (retval.toInt32() !== 0)
+        {
+          this.availableAllocUnits.writeULong(this.availableAllocUnits.readULong() * 5);
+          send("[System Environment] GetDiskSpaceInformation");
+        }
+      }
+    });
+
     const GetDiskFreeSpaceA = Module.getExportByName('Kernel32.dll', 'GetDiskFreeSpaceA');
     Interceptor.attach(GetDiskFreeSpaceA, {
       onEnter(args) {
@@ -568,13 +704,13 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         if (retval.toInt32() !== 0)
         {
           this.freeClusters.writeUInt(this.freeClusters.readUInt() * 5);
           this.totalClusters.writeUInt(this.totalClusters.readUInt() * 5);
-          send("[System Environment] GetDiskFreeSpaceA");
+          send("[System Environment] GetDiskFreeSpace");
         }
       }
     });
@@ -587,13 +723,13 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         if (retval.toInt32() !== 0)
         {
           this.freeClusters.writeUInt(this.freeClusters.readUInt() * 5);
           this.totalClusters.writeUInt(this.totalClusters.readUInt() * 5);
-          send("[System Environment] GetDiskFreeSpaceW");
+          send("[System Environment] GetDiskFreeSpace");
         }
       }
     });
@@ -607,15 +743,15 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         if (this.freeBytesCaller !== NULL)
           this.freeBytesCaller.writeULong(this.freeBytesCaller.readULong() * 5);
         if (this.totalBytes !== NULL)
           this.totalBytes.writeULong(this.totalBytes.readULong() * 5);
         if (this.totalFreeBytes !== NULL)
           this.totalFreeBytes.writeULong(this.totalFreeBytes.readULong() * 5);  
-        send("[System Environment] GetDiskFreeSpaceExA");
+        send("[System Environment] GetDiskFreeSpace");
       }
     });
 
@@ -628,15 +764,15 @@
       },  
       
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         if (this.freeBytesCaller !== NULL)
           this.freeBytesCaller.writeULong(this.freeBytesCaller.readULong() * 5);
         if (this.totalBytes !== NULL)
           this.totalBytes.writeULong(this.totalBytes.readULong() * 5);
         if (this.totalFreeBytes !== NULL)
           this.totalFreeBytes.writeULong(this.totalFreeBytes.readULong() * 5);  
-        send("[System Environment] GetDiskFreeSpaceExW");
+        send("[System Environment] GetDiskFreeSpace");
       }
     });
 
@@ -647,16 +783,15 @@
       },  
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         //should add check for return value
         if (this.adapterAddresses !== NULL)
         {
           //offset 44=0x2c from the beginning of the struct
           //overwrite with fake MAC address
-          this.adapterAddresses.add(44).readPointer().writeByteArray([ 0xcc, 0x2f, 0x71, 0x23, 0x34, 0x56 ]); //BYTE PhysicalAddress[MAX_ADAPTER_ADDRESS_LENGTH]
-          send("[System Environment] GetAdaptersAddresses replaced MAC address");
-          console.log(this.adapterAddresses.add(44).readPointer().readByteArray(6));
+          send("[System Environment] GetAdaptersAddresses - replaced MAC address" + this.adapterAddresses.readPointer().add(44).readByteArray(6));
+          this.adapterAddresses.readPointer().add(44).writeByteArray([ 0xcc, 0x2f, 0x71, 0x23, 0x34, 0x56 ]); //BYTE PhysicalAddress[MAX_ADAPTER_ADDRESS_LENGTH]
         }
       }
     });
@@ -668,8 +803,8 @@
       },  
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         //should add check for return value
         if (this.adapterInfo !== NULL)
         {
@@ -677,11 +812,9 @@
           //offset 8=0x8 from the beginning of the struct -> char AdapterName[MAX_ADAPTER_NAME_LENGTH + 4] (ANSI string)
           //offset 8 + 256 + 128 + 4=396 -> BYTE Address[MAX_ADAPTER_ADDRESS_LENGTH];
           //source: https://www.rpi.edu/dept/cis/software/g77-mingw32/include/iptypes.h
-          this.adapterInfo.add(8).readPointer().writeAnsiString('ASUS XG-C100C'); //fake adapter name
-          this.adapterInfo.add(396).readPointer().writeByteArray([ 0xcc, 0x2f, 0x71, 0x23, 0x34, 0x56 ]); //fake MAC address
-          send("[System Environment] GetAdaptersInfo replaced name and MAC address");
-          console.log(this.adapterInfo.add(8).readPointer().readAnsiString());
-          console.log(this.adapterInfo.add(396).readPointer().readByteArray(6));
+          send("[System Environment] GetAdaptersInfo - replaced name and MAC address"); //+ this.adapterInfo.readPointer().add(8).readAnsiString());
+          //this.adapterInfo.readPointer().add(8).writeAnsiString('ASUS XG-C100C'); //fake adapter name - access violation
+          //this.adapterInfo.readPointer().add(396).writeByteArray([ 0xcc, 0x2f, 0x71, 0x23, 0x34, 0x56 ]); //fake MAC address
         }
       }
     });
@@ -694,7 +827,7 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (this.sysDbgCommand === 20) //SysDbgCheckLowMemory
         {
@@ -704,28 +837,167 @@
       },
     });
 
-    /* const SetupDiGetDeviceRegistryPropertyA = Module.getExportByName(null, 'SetupDiGetDeviceRegistryPropertyA');
-    Interceptor.attach(SetupDiGetDeviceRegistryPropertyA, {
-        onEnter(args) {
-          this.buffer = args[4]; //PBYTE PropertyBuffer
-          this.bufferSize = args[5]; //DWORD PropertyBufferSize
-          send("[System Environment] SetupDiGetDeviceRegistryPropertyA");
-        },
+    const GetSystemFirmwareTable = Module.getExportByName('Kernel32.dll', 'GetSystemFirmwareTable');
+    Interceptor.attach(GetSystemFirmwareTable, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        send("[System Environment] GetSystemFirmwareTable");
+      },
+    });
 
-        onLeave() {
-          if (this.bufferSize.toUInt32() !== 0)
-            
+    let mutex_blacklist = [
+                            "sandboxie",
+                            "sbie_boxed",
+                            "frz_state", //deep freeze
+                            "virtualpc"
+                          ]
+
+    const CreateMutexA = Module.getExportByName('Kernel32.dll', 'CreateMutexA');
+    Interceptor.attach(CreateMutexA, {
+      onEnter(args) {
+        this.mutexName = args[2]; //LPCSTR lpName
+      },
+
+      onLeave() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode ||
+            this.mutexName.isNull())
+            return;
+        for (let m of mutex_blacklist)
+        {
+          if (this.mutexName.readAnsiString().toLowerCase().includes(m))
+          {
+              send("[System Environment] CreateMutex - " + this.mutexName.readAnsiString());
+              this.mutexName.writeAnsiString("meow");
+          }
         }
-    }); */
+      },
+    });
+
+    const CreateMutexW = Module.getExportByName('Kernel32.dll', 'CreateMutexW');
+    Interceptor.attach(CreateMutexW, {
+      onEnter(args) {
+        this.mutexName = args[2]; //LPCWSTR lpName
+      },
+
+      onLeave() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode ||
+            this.mutexName.isNull())
+            return;
+        for (let m of mutex_blacklist)
+        {
+          if (this.mutexName.readUtf16String().toLowerCase().includes(m))
+          {
+              send("[System Environment] CreateMutex - " + this.mutexName.readUtf16String());
+              this.mutexName.writeUtf16String("meow");
+          }
+        }
+      },
+    });
+
+    const CreateMutexExA = Module.getExportByName('Kernel32.dll', 'CreateMutexExA');
+    Interceptor.attach(CreateMutexExA, {
+      onEnter(args) {
+        this.mutexName = args[1]; //LPCSTR lpName
+      },
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode ||
+            this.mutexName.isNull())
+            return;
+        for (let m of mutex_blacklist)
+        {
+          if (this.mutexName.readAnsiString().toLowerCase().includes(m))
+          {
+              send("[System Environment] CreateMutex - " + this.mutexName.readAnsiString());
+              this.mutexName.writeAnsiString("meow");
+          }
+        }
+      },
+    });
+
+    const CreateMutexExW = Module.getExportByName('Kernel32.dll', 'CreateMutexExW');
+    Interceptor.attach(CreateMutexExW, {
+      onEnter(args) {
+        this.mutexName = args[1]; //LPCWSTR lpName
+      },
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode ||
+            this.mutexName.isNull())
+            return;
+        for (let m of mutex_blacklist)
+        {
+          if (this.mutexName.readUtf16String().toLowerCase().includes(m))
+          {
+              send("[System Environment] CreateMutex - " + this.mutexName.readUtf16String());
+              this.mutexName.writeUtf16String("meow");
+          }
+        }
+      },
+    });
+
+    const OpenMutexW = Module.getExportByName('Kernel32.dll', 'OpenMutexW');
+    Interceptor.attach(OpenMutexW, {
+      onEnter(args) {
+        this.mutexName = args[2]; //LPCWSTR lpName
+      },
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode ||
+            this.mutexName.isNull())
+            return;
+        for (let m of mutex_blacklist)
+        {
+          if (this.mutexName.readUtf16String().toLowerCase().includes(m))
+          {
+              send("[System Environment] OpenMutex - " + this.mutexName.readUtf16String());
+              this.mutexName.writeUtf16String("meow");
+          }
+        }
+      },
+    });
 
     try {
-        const EnumPrinters = Module.getExportByName(null, 'EnumPrinters');
-        Interceptor.attach(EnumPrinters, {
-        onEnter() {
-          if (!appModules.has(this.returnAddress))
+      const SetupDiGetDeviceRegistryPropertyA = Module.getExportByName(null, 'SetupDiGetDeviceRegistryPropertyA');
+      Interceptor.attach(SetupDiGetDeviceRegistryPropertyA, {
+          onEnter(args) {
+            //this.buffer = args[4]; //PBYTE PropertyBuffer
+            //this.bufferSize = args[5]; //DWORD PropertyBufferSize
+          },
+  
+          onLeave() {
+            if (!appModules.has(this.returnAddress) && onlyAppCode)
               return;
-          send("[System Environment] EnumPrinters");
-        }
+            send("[System Environment] SetupDiGetDeviceRegistryProperty");
+          }
+      });
+
+      const SetupDiGetDeviceRegistryPropertyW = Module.getExportByName(null, 'SetupDiGetDeviceRegistryPropertyW');
+      Interceptor.attach(SetupDiGetDeviceRegistryPropertyW, {
+          onEnter(args) {
+            //this.buffer = args[4]; //PBYTE PropertyBuffer
+            //this.bufferSize = args[5]; //DWORD PropertyBufferSize
+          },
+  
+          onLeave() {
+            if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+            send("[System Environment] SetupDiGetDeviceRegistryProperty");
+          }
+      });
+    } catch (error) {
+        console.log(error);
+    }
+
+    try {
+      const EnumPrinters = Module.getExportByName(null, 'EnumPrinters');
+      Interceptor.attach(EnumPrinters, {
+      onEnter() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+          return;
+        send("[System Environment] EnumPrinters");
+      }
     });
     } catch (error) {
         console.log(error);

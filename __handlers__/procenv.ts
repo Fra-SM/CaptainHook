@@ -22,11 +22,12 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     const NtSetInformationThread = Module.getExportByName('ntdll.dll', 'NtSetInformationThread');
     Interceptor.attach(NtSetInformationThread, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.threadInfoClass = args[1]; //THREADINFOCLASS ThreadInformationClass
         if (this.threadInfoClass.toInt32() === 17) //ThreadHideFromDebugger
@@ -42,7 +43,7 @@
     const NtCreateThreadEx = Module.getExportByName('ntdll.dll', 'NtCreateThreadEx');
     Interceptor.attach(NtCreateThreadEx, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.threadCreateFlags = args[6]; //ULONG CreateFlags
         if (this.threadCreateFlags.toInt32() === 4) //THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER 0x00000004
@@ -57,7 +58,7 @@
     const NtGetContextThread = Module.getExportByName('ntdll.dll', 'NtGetContextThread');
     Interceptor.attach(NtGetContextThread, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.contextStruct = args[1]; //PCONTEXT pContext
         if (this.contextStruct.add(48).readUInt() === 1048592) //CONTEXT_DEBUG_REGISTERS
@@ -76,7 +77,7 @@
     const GetThreadContext = Module.getExportByName('Kernel32.dll', 'GetThreadContext');
     Interceptor.attach(GetThreadContext, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.contextStruct = args[1]; //PCONTEXT pContext
         //console.log(this.contextStruct.add(48).readInt());
@@ -96,12 +97,25 @@
     const NtSetContextThread = Module.getExportByName('ntdll.dll', 'NtSetContextThread');
     Interceptor.attach(NtSetContextThread, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.contextStruct = args[1]; //PCONTEXT pContext
         if (this.contextStruct.add(48).readUInt() === 1048592) //CONTEXT_DEBUG_REGISTERS
         {
             send("[Process Environment] NtSetContextThread(CONTEXT_DEBUG_REGISTERS)");
+        }
+      }
+    });
+
+    const SetThreadContext = Module.getExportByName('Kernel32.dll', 'SetThreadContext');
+    Interceptor.attach(SetThreadContext, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.contextStruct = args[1]; //PCONTEXT pContext
+        if (this.contextStruct.add(48).readUInt() === 1048592) //CONTEXT_DEBUG_REGISTERS
+        {
+            send("[Process Environment] SetThreadContext(CONTEXT_DEBUG_REGISTERS)");
         }
       }
     });
@@ -128,41 +142,156 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (this.pbi)
         {
             this.outputInfo.add(20).writeInt(333); //set parent pid to fake value, should probably check this exists
-            send("[Others] NtQueryInformationProcess(ProcessBasicInformation/0x0) - IsParentExplorerExe");
+            send("[Others] NtQueryInformationProcess(ProcessBasicInformation/0x0) - possibly PEB checks or IsParentExplorerExe");
         }
         if (this.pdp)
         {
-            this.outputInfo.writeInt(0); //set debugging flag to 0
+            this.outputInfo.writeUInt(0); //set debugging flag to 0
             send("[Process Environment] NtQueryInformationProcess(ProcessDebugPort/0x7)");
         }
         if (this.pdoh)
         {
-            this.outputInfo.writeInt(0); //set debugging flag to 0
+            this.outputInfo.writeUInt(0); //set debugging flag to 0
             send("[Process Environment] NtQueryInformationProcess(ProcessDebugObjectHandle/0x1e)");
         }  
         if (this.pdf)
         {
-            this.outputInfo.writeInt(1); //set debugging flag to 1
+            this.outputInfo.writeUInt(1); //set debugging flag to 1
             send("[Process Environment] NtQueryInformationProcess(ProcessDebugFlags/0x1f)");
         }
       }
     });
 
-    //child-gating feature should be enabled for this to work
     const DebugActiveProcess = Module.getExportByName('Kernel32.dll', 'DebugActiveProcess');
     Interceptor.attach(DebugActiveProcess, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.pid = args[0].toUInt32(); //DWORD dwProcessId
         if (this.pid === process.ppid) //check if the child process is trying to debug its parent
             send(`[Process Environment] DebugActiveProcess(PARENT_PID=${this.pid})`);
       }
+    });
+
+    let modules_blacklist = [
+      "avghook", //AVG
+      "snxhk", //AVAST
+      "sf2.dll",
+      "sxln", //360 TOTAL SECURITY
+      "sbiedll", //SANDBOXIE
+      "dbghelp", //THREATEXPERT
+      "api_log", //CWSANDBOX
+      "dir_watch",
+      "pstorec",
+      "vmcheck", //VIRTUALPC
+      "wpespy", //WPE PRO
+      "cmdvrt64", //COMODO
+      "cmdvrt32"
+    ];
+
+    const GetModuleHandleA = Module.getExportByName('Kernel32.dll', 'GetModuleHandleA');
+    Interceptor.attach(GetModuleHandleA, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.module = args[0].isNull() ? '0123456789' : args[0].readAnsiString(); //LPCSTR lpModuleName
+        console.log(this.module);
+        this.isBlacklisted = false;
+
+        for (let m of modules_blacklist)
+        {
+          if (this.module.toLowerCase().includes(m))
+          {
+              send(`[Process Environment] GetModuleHandle - checked module: ${this.module}`);
+              this.isBlacklisted = true;
+          }      
+        }
+      },
+
+      onLeave(retval) {
+        if (this.isBlacklisted)
+          retval.replace(NULL);
+      },
+    });
+
+    const GetModuleHandleW = Module.getExportByName('Kernel32.dll', 'GetModuleHandleW');
+    Interceptor.attach(GetModuleHandleW, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.module = args[0].isNull() ? '0123456789' : args[0].readUtf16String(); //LPCSTR lpModuleName
+        console.log(this.module);
+        this.isBlacklisted = false;
+
+        for (let m of modules_blacklist)
+        {
+          if (this.module.toLowerCase().includes(m))
+          {
+              send(`[Process Environment] GetModuleHandle - checked module: ${this.module})`);
+              this.isBlacklisted = true;
+          }      
+        }
+      },
+
+      onLeave(retval) {
+        if (this.isBlacklisted)
+          retval.replace(NULL);
+      },
+    });
+    
+    const GetModuleHandleExA = Module.getExportByName('Kernel32.dll', 'GetModuleHandleExA');
+    Interceptor.attach(GetModuleHandleExA, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.module = args[1].isNull() ? '0123456789' : args[1].readAnsiString(); //LPCSTR lpModuleName
+        console.log(this.module);
+        this.isBlacklisted = false;
+
+        for (let m of modules_blacklist)
+        {
+          if (this.module.toLowerCase().includes(m))
+          {
+              send(`[Process Environment] GetModuleHandle - checked module: ${this.module})`);
+              this.isBlacklisted = true;
+          }      
+        }
+      },
+
+      onLeave(retval) {
+        if (this.isBlacklisted)
+          retval.replace(NULL);
+      },
+    });
+
+    const GetModuleHandleExW = Module.getExportByName('Kernel32.dll', 'GetModuleHandleExW');
+    Interceptor.attach(GetModuleHandleExW, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.module = args[1].isNull() ? '0123456789' : args[1].readUtf16String(); //LPCSTR lpModuleName
+        console.log(this.module);
+        this.isBlacklisted = false;
+
+        for (let m of modules_blacklist)
+        {
+          if (this.module.toLowerCase().includes(m))
+          {
+              send(`[Process Environment] GetModuleHandle - checked module: ${this.module})`);
+              this.isBlacklisted = true;
+          }      
+        }
+      },
+
+      onLeave(retval) {
+        if (this.isBlacklisted)
+          retval.replace(NULL);
+      },
     });
 
     /**

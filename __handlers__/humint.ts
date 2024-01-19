@@ -27,15 +27,16 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     const MessageBoxA = Module.getExportByName('User32.dll', 'MessageBoxA');
     const MessageBoxW = Module.getExportByName('User32.dll', 'MessageBoxW');
     const MessageBoxExA = Module.getExportByName('User32.dll', 'MessageBoxExA');
     const MessageBoxExW = Module.getExportByName('User32.dll', 'MessageBoxExW');
-    Interceptor.replace(MessageBoxA, new NativeCallback((hWND, lpText, lpCaption, uType) => {send("[Human Interaction] MessageBoxA");return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint']));
-    Interceptor.replace(MessageBoxW, new NativeCallback((hWND, lpText, lpCaption, uType) => {send("[Human Interaction] MessageBoxW");return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint']));
-    Interceptor.replace(MessageBoxExA, new NativeCallback((hWND, lpText, lpCaption, uType, wLanguageId) => {send("[Human Interaction] MessageBoxExA");return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint', 'uint16']));
-    Interceptor.replace(MessageBoxExW, new NativeCallback((hWND, lpText, lpCaption, uType, wLanguageId) => {send("[Human Interaction] MessageBoxExW");return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint', 'uint16']));
+    /* Interceptor.replace(MessageBoxA, new NativeCallback((hWND, lpText, lpCaption, uType) => {send("[Human Interaction] MessageBoxA - " + lpText.readAnsiString());return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint']));
+    Interceptor.replace(MessageBoxW, new NativeCallback((hWND, lpText, lpCaption, uType) => {send("[Human Interaction] MessageBoxW - " + lpText.readUtf16String());return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint']));
+    Interceptor.replace(MessageBoxExA, new NativeCallback((hWND, lpText, lpCaption, uType, wLanguageId) => {send("[Human Interaction] MessageBoxExA - " + lpText.readAnsiString());return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint', 'uint16']));
+    Interceptor.replace(MessageBoxExW, new NativeCallback((hWND, lpText, lpCaption, uType, wLanguageId) => {send("[Human Interaction] MessageBoxExW - " + lpText.readUtf16String());return 0;}, 'int', ['pointer', 'pointer', 'pointer', 'uint', 'uint16'])); */
 
     /* typedef struct tagPOINT {
         LONG x; offset 0
@@ -50,8 +51,8 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Human Interaction] GetCursorPos");
         this.pointx.writeInt(getRandomInt(500));
         //console.log(this.pointx.readInt());
@@ -71,7 +72,7 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Human Interaction] GetLastInputInfo");
         this.lastInputTick.writeUInt(getRandomInt(500));
@@ -83,7 +84,7 @@
     const GetForegroundWindow = Module.getExportByName('User32.dll', 'GetForegroundWindow');
     Interceptor.attach(GetForegroundWindow, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Human Interaction] GetForegroundWindow");
       }
@@ -94,7 +95,7 @@
     const GetAsyncKeyState = Module.getExportByName('User32.dll', 'GetAsyncKeyState');
     Interceptor.attach(GetAsyncKeyState, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Human Interaction] GetAsyncKeyState");
       }
@@ -103,10 +104,10 @@
     const SetWindowsHookExA = Module.getExportByName('User32.dll', 'SetWindowsHookExA');
     Interceptor.attach(SetWindowsHookExA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let hookId = args[0].toInt32(); //int idHook
-        send("[Human Interaction] SetWindowsHookExA");
+        send("[Human Interaction] SetWindowsHookEx");
         if (hookId === 7 || hookId === 14)
             console.log('Mouse events have been hooked');
       }
@@ -115,10 +116,10 @@
     const SetWindowsHookExW = Module.getExportByName('User32.dll', 'SetWindowsHookExW');
     Interceptor.attach(SetWindowsHookExW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let hookId = args[0].toInt32(); //int idHook
-        send("[Human Interaction] SetWindowsHookExW");
+        send("[Human Interaction] SetWindowsHookEx");
         if (hookId === 7 || hookId === 14)
             console.log('Mouse events have been hooked');
       }

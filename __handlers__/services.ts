@@ -22,6 +22,7 @@
   
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     let services_blacklist = [
         "vmwarehostd",
@@ -53,18 +54,18 @@
     const OpenSCManagerA = Module.getExportByName('Advapi32.dll', 'OpenSCManagerA');
     Interceptor.attach(OpenSCManagerA, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Services] OpenSCManagerA");
+        console.log("[Services] OpenSCManagerA");
       }
     });
 
     const OpenSCManagerW = Module.getExportByName('Advapi32.dll', 'OpenSCManagerW');
     Interceptor.attach(OpenSCManagerW, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Services] OpenSCManagerW");
+        console.log("[Services] OpenSCManagerW");
       }
     });
 
@@ -73,14 +74,14 @@
     const OpenServiceA = Module.getExportByName('Advapi32.dll', 'OpenServiceA');
     Interceptor.attach(OpenServiceA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_service = args[1].readAnsiString(); //LPCSTR lpServiceName
         let to_check = checked_service !== null ? checked_service.toLowerCase() : '0123456789';
         for (let s of services_blacklist) {
             if (to_check.includes(s))
             {
-                send("[Services] OpenServiceA - service checked: " + checked_service);
+                send("[Services] OpenService - service checked: " + checked_service);
                 //replace the service's name if blacklisted
                 const dummyService = Memory.allocAnsiString('meow');
                 this.dummyService = dummyService;
@@ -93,14 +94,14 @@
     const OpenServiceW = Module.getExportByName('Advapi32.dll', 'OpenServiceW');
     Interceptor.attach(OpenServiceW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_service = args[1].readUtf16String(); //LPCWSTR lpServiceName
         let to_check = checked_service !== null ? checked_service.toLowerCase() : '0123456789';
         for (let s of services_blacklist) {
             if (to_check.includes(s))
             {
-                send("[Services] OpenServiceW - service checked: " + checked_service);
+                send("[Services] OpenService - service checked: " + checked_service);
                 //replace the service's name if blacklisted
                 const dummyService = Memory.allocUtf16String('meow');
                 this.dummyService = dummyService;
@@ -113,14 +114,14 @@
     const GetServiceKeyNameA = Module.getExportByName('Advapi32.dll', 'GetServiceKeyNameA');
     Interceptor.attach(GetServiceKeyNameA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_service = args[1].readAnsiString(); //LPCSTR lpDisplayName
         let to_check = checked_service !== null ? checked_service.toLowerCase() : '0123456789';
         for (let s of services_blacklist) {
             if (to_check.includes(s))
             {
-                send("[Services] GetServiceKeyNameA - service checked: " + checked_service);
+                send("[Services] GetServiceKeyName - service checked: " + checked_service);
                 //replace the service's name if blacklisted
                 const dummyService = Memory.allocAnsiString('meow');
                 this.dummyService = dummyService;
@@ -133,14 +134,14 @@
     const GetServiceKeyNameW = Module.getExportByName('Advapi32.dll', 'GetServiceKeyNameW');
     Interceptor.attach(GetServiceKeyNameW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_service = args[1].readUtf16String(); //LPCWSTR lpDisplayName
         let to_check = checked_service !== null ? checked_service.toLowerCase() : '0123456789';
         for (let s of services_blacklist) {
             if (to_check.includes(s))
             {
-                send("[Services] GetServiceKeyNameW - service checked: " + checked_service);
+                send("[Services] GetServiceKeyName - service checked: " + checked_service);
                 //replace the service's name if blacklisted
                 const dummyService = Memory.allocUtf16String('meow');
                 this.dummyService = dummyService;
@@ -153,14 +154,14 @@
     const GetServiceDisplayNameA = Module.getExportByName('Advapi32.dll', 'GetServiceDisplayNameA');
     Interceptor.attach(GetServiceDisplayNameA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_service = args[1].readAnsiString(); //LPCSTR lpServiceName
         let to_check = checked_service !== null ? checked_service.toLowerCase() : '0123456789';
         for (let s of services_blacklist) {
             if (to_check.includes(s))
             {
-                send("[Services] GetServiceDisplayNameA - service checked: " + checked_service);
+                send("[Services] GetServiceDisplayName - service checked: " + checked_service);
                 //replace the service's name if blacklisted
                 const dummyService = Memory.allocAnsiString('meow');
                 this.dummyService = dummyService;
@@ -173,14 +174,14 @@
     const GetServiceDisplayNameW = Module.getExportByName('Advapi32.dll', 'GetServiceDisplayNameW');
     Interceptor.attach(GetServiceDisplayNameW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let checked_service = args[1].readUtf16String(); //LPCWSTR lpServiceName
         let to_check = checked_service !== null ? checked_service.toLowerCase() : '0123456789';
         for (let s of services_blacklist) {
             if (to_check.includes(s))
             {
-                send("[Services] GetServiceDisplayNameW - service checked: " + checked_service);
+                send("[Services] GetServiceDisplayName - service checked: " + checked_service);
                 //replace the service's name if blacklisted
                 const dummyService = Memory.allocUtf16String('meow');
                 this.dummyService = dummyService;
@@ -198,9 +199,9 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Services] EnumServicesStatusA");
+        send("[Services] EnumServicesStatus");
         const numSrv = this.numServices.readUInt();
         if (numSrv > 0)
           for (var i = 0; i < numSrv; i++)
@@ -212,7 +213,7 @@
             for (let s of services_blacklist) {
                 if (this.serviceName.toLowerCase().includes(s))
                 {
-                    send("[Services] EnumServicesStatusA - replaced service name: " + this.serviceName);
+                    send("[Services] EnumServicesStatus - replaced service name: " + this.serviceName);
                     console.log('Replacing service name:', this.serviceName);
                     //replace the service's name if blacklisted
                     this.lpServices.add(i * (28 + Process.pointerSize * 2)).readPointer().writeAnsiString('meow');
@@ -220,7 +221,7 @@
                 }   
                 if (this.displayName.toLowerCase().includes(s)) 
                 {
-                  send("[Services] EnumServicesStatusA - replaced service display name: " + this.displayName);
+                  send("[Services] EnumServicesStatus - replaced service display name: " + this.displayName);
                   //replace the service's name if blacklisted
                   this.lpServices.add(i * (28 + Process.pointerSize * 2) + Process.pointerSize).readPointer().writeAnsiString('meow');
                   //console.log(this.lpServices.add((i * (28 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().readAnsiString());
@@ -238,9 +239,9 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Services] EnumServicesStatusW");
+        send("[Services] EnumServicesStatus");
         const numSrv = this.numServices.readUInt();
         if (numSrv > 0)
           for (var i = 0; i < numSrv; i++)
@@ -252,14 +253,14 @@
             for (let s of services_blacklist) {
                 if (this.serviceName.toLowerCase().includes(s))
                 {
-                  send("[Services] EnumServicesStatusW - replaced service name: " + this.serviceName);
+                  send("[Services] EnumServicesStatus - replaced service name: " + this.serviceName);
                   //replace the service's name if blacklisted
                   this.lpServices.add(i * (28 + Process.pointerSize * 2)).readPointer().writeUtf16String('meow');
                   //console.log(this.lpServices.add(i * (28 + Process.pointerSize * 2)).readPointer().readUtf16String());
                 }   
                 if (this.displayName.toLowerCase().includes(s)) 
                 {
-                  send("[Services] EnumServicesStatusW - replaced service display name: " + this.displayName);
+                  send("[Services] EnumServicesStatus - replaced service display name: " + this.displayName);
                   //replace the service's name if blacklisted
                   this.lpServices.add((i * (28 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().writeUtf16String('meow');
                   //console.log(this.lpServices.add((i * (28 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().readUtf16String());
@@ -278,9 +279,9 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Services] EnumServicesStatusExA");
+        send("[Services] EnumServicesStatus");
         const numSrv = this.numServices.readUInt();
         if (numSrv > 0)
           for (var i = 0; i < numSrv; i++)
@@ -292,14 +293,14 @@
             for (let s of services_blacklist) {
                 if (this.serviceName.toLowerCase().includes(s))
                 {
-                  send("[Services] EnumServicesStatusExA - replaced service name: " + this.serviceName);
+                  send("[Services] EnumServicesStatus - replaced service name: " + this.serviceName);
                     //replace the service's name if blacklisted
                     this.lpServices.add(i * (36 + Process.pointerSize * 2)).readPointer().writeAnsiString('meow');
                     //console.log(this.lpServices.add(i * (28 + Process.pointerSize * 2)).readPointer().readAnsiString());
                 }   
                 if (this.displayName.toLowerCase().includes(s)) 
                 {
-                  send("[Services] EnumServicesStatusExA - replaced service display name: " + this.displayName);
+                  send("[Services] EnumServicesStatus - replaced service display name: " + this.displayName);
                   //replace the service's name if blacklisted
                   this.lpServices.add((i * (36 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().writeAnsiString('meow');
                   //console.log(this.lpServices.add((i * (28 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().readAnsiString());
@@ -317,9 +318,9 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Services] EnumServicesStatusExW");
+        send("[Services] EnumServicesStatus");
         const numSrv = this.numServices.readUInt();
         if (numSrv > 0)
           for (var i = 0; i < numSrv; i++)
@@ -331,14 +332,14 @@
             for (let s of services_blacklist) {
                 if (this.serviceName.toLowerCase().includes(s))
                 {
-                  send("[Services] EnumServicesStatusExW - replaced service name: " + this.serviceName);
+                  send("[Services] EnumServicesStatus - replaced service name: " + this.serviceName);
                     //replace the service's name if blacklisted
                     this.lpServices.add(i * (36 + Process.pointerSize * 2)).readPointer().writeUtf16String('meow');
                     //console.log(this.lpServices.add(i * (28 + Process.pointerSize * 2)).readPointer().readUtf16String());
                 }   
                 if (this.displayName.toLowerCase().includes(s)) 
                 {
-                  send("[Services] EnumServicesStatusExW - replaced service display name: " + this.displayName);
+                  send("[Services] EnumServicesStatus - replaced service display name: " + this.displayName);
                   //replace the service's name if blacklisted
                   this.lpServices.add((i * (36 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().writeUtf16String('meow');
                   //console.log(this.lpServices.add((i * (28 + Process.pointerSize * 2)) + Process.pointerSize).readPointer().readUtf16String());

@@ -22,11 +22,12 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     const GetSystemDefaultLangID = Module.getExportByName("Kernel32.dll", 'GetSystemDefaultLangID');
     Interceptor.attach(GetSystemDefaultLangID, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         retval.replace(ptr(1033)); //EN-US LANGID
         send("[Geofencing] GetSystemDefaultLangID");
@@ -36,7 +37,7 @@
     const GetUserDefaultLangID = Module.getExportByName("Kernel32.dll", 'GetUserDefaultLangID');
     Interceptor.attach(GetUserDefaultLangID, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         retval.replace(ptr(1033)); //EN-US LANGID
         send("[Geofencing] GetUserDefaultLangID");
@@ -46,7 +47,7 @@
     const GetSystemDefaultUILanguage = Module.getExportByName("Kernel32.dll", 'GetSystemDefaultUILanguage');
     Interceptor.attach(GetSystemDefaultUILanguage, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         retval.replace(ptr(1033)); //EN-US LANGID
         send("[Geofencing] GetSystemDefaultUILanguage");
@@ -56,7 +57,7 @@
     const GetUserDefaultUILanguage = Module.getExportByName("Kernel32.dll", 'GetUserDefaultUILanguage');
     Interceptor.attach(GetUserDefaultUILanguage, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         retval.replace(ptr(1033)); //EN-US LANGID
         send("[Geofencing] GetUserDefaultUILanguage");
@@ -70,8 +71,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Geofencing] GetUserGeoID");
         if (this.geoClass === 16)
           retval.replace(ptr(244)); //US geoid
@@ -83,8 +84,8 @@
     const GetKeyboardLayout = Module.getExportByName('User32.dll', 'GetKeyboardLayout');
     Interceptor.attach(GetKeyboardLayout, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Geofencing] GetKeyboardLayout");
         retval.replace(ptr(0x00000409)); //EN-US LANGID
       }
@@ -96,37 +97,38 @@
         this.layouts = args[1]; //HKL* lpList
       },
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-          return;
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Geofencing] GetKeyboardLayoutList");
-        this.layouts.writePointer(ptr(0x00000409)); //EN-US LANGID
+        //fix access violation
+        //this.layouts.writePointer(ptr(0x00000409)); //EN-US LANGID
       }
     });
 
     const GetLocaleInfoA = Module.getExportByName('Kernel32.dll', 'GetLocaleInfoA');
     Interceptor.attach(GetLocaleInfoA, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Geofencing] GetLocaleInfoA");
+        send("[Geofencing] GetLocaleInfo");
       }
     });
 
     const GetLocaleInfoW = Module.getExportByName('Kernel32.dll', 'GetLocaleInfoW');
     Interceptor.attach(GetLocaleInfoW, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Geofencing] GetLocaleInfoW");
+        send("[Geofencing] GetLocaleInfo");
       }
     });
 
     const GetLocaleInfoEx = Module.getExportByName('Kernel32.dll', 'GetLocaleInfoEx');
     Interceptor.attach(GetLocaleInfoEx, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Geofencing] GetLocaleInfoEx");
+        send("[Geofencing] GetLocaleInfo");
       }
     });
 

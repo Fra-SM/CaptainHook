@@ -22,7 +22,8 @@
   
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
-    
+    const onlyAppCode = true;
+
     let processes_blacklist = [
         "vbox",
         "vmware",
@@ -36,13 +37,11 @@
         "processhacker",			 // Process Hacker
         "tcpview",					 // Part of Sysinternals Suite
         "autoruns",					 // Part of Sysinternals Suite
-        //"autorunsc",				 // Part of Sysinternals Suite
         "filemon",					 // Part of Sysinternals Suite
         "procmon",					 // Part of Sysinternals Suite
         "regmon",					 // Part of Sysinternals Suite
         "procexp",					 // Part of Sysinternals Suite
         "ida",						 // IDA Pro Interactive Disassembler
-        //"idaq64",					 // IDA Pro Interactive Disassembler
         "immunitydebugger",			 // ImmunityDebugger
         "wireshark",				 // Wireshark packet sniffer
         "dumpcap",					 // Network traffic dump tool
@@ -126,7 +125,7 @@
     const EnumProcesses = Module.getExportByName(null, 'EnumProcesses');
     Interceptor.attach(EnumProcesses, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Processes] EnumProcesses");
       }
@@ -140,12 +139,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let p of processes_blacklist) {
             if (this.process.toLowerCase().includes(p))
             {
-                send("[Processes] GetModuleBaseNameA - process checked: " + this.process);
+                send("[Processes] GetModuleBaseName - process checked: " + this.process);
                 //replace the process' name if blacklisted
                 this.lpBaseName.writeAnsiString('meow');
                 //console.log(this.lpBaseName.readAnsiString());
@@ -164,12 +163,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let p of processes_blacklist) {
             if (this.process.toLowerCase().includes(p))
             {
-                send("[Processes] GetModuleBaseNameW - process checked: " + this.process);
+                send("[Processes] GetModuleBaseName - process checked: " + this.process);
                 //replace the process' name if blacklisted
                 this.lpBaseName.writeUtf16String('meow');
                 //console.log(this.lpBaseName.readUtf16String());
@@ -187,7 +186,7 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let p of processes_blacklist) {
             if (this.szName.readCString().toLowerCase().includes(p))
@@ -210,12 +209,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let p of processes_blacklist) {
             if (this.szName.readUtf16String().toLowerCase().includes(p))
             {
-                send("[Processes] Process32FirstW - replaced process: " + this.szName.readUtf16String());
+                send("[Processes] Process32First - replaced process: " + this.szName.readUtf16String());
                 //replace the process' name if blacklisted
                 this.szName.writeUtf16String('meow');
                 //console.log(this.szName.readUtf16String());
@@ -233,7 +232,7 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let p of processes_blacklist) {
             if (this.szName.readCString().toLowerCase().includes(p))
@@ -256,12 +255,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let p of processes_blacklist) {
             if (this.szName.readUtf16String().toLowerCase().includes(p))
             {
-                send("[Processes] Process32NextW - replaced process: " + this.szName.readUtf16String());
+                send("[Processes] Process32Next - replaced process: " + this.szName.readUtf16String());
                 //replace the process' name if blacklisted
                 this.szName.writeUtf16String('meow');
                 //console.log(this.szName.readUtf16String());
@@ -275,15 +274,17 @@
     const GetProcAddress = Module.getExportByName('Kernel32.dll', 'GetProcAddress');
     Interceptor.attach(GetProcAddress, {
       onEnter(args) {
-        this.procedure = args[1].readAnsiString(); //LPCSTR lpProcName
+        this.procedure = args[1]; //LPCSTR lpProcName
       },
    
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            this.procedure.isNull())
             return;
-        if (this.procedure.toLowerCase().includes("wine"))
+        if (this.procedure.readAnsiString().toLowerCase().includes("wine"))
         {
-            send("[Emulation] Wine - procedure checked: ", this.procedure);
+            send("[Emulation] Wine - procedure checked: ", this.procedure.readAnsiString());
             //replace the return value with NULL
             retval.replace(NULL);
         }       

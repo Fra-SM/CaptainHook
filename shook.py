@@ -61,7 +61,7 @@ def update_detection_data(data):
     existing_data = []
     try:
         with open(f'{args.save}.csv', mode='r') as file:
-            reader = csv.DictReader(file, fieldnames=['Family', 'Name', 'Detections', 'Notes'])
+            reader = csv.DictReader(file, fieldnames=['Family', 'Name', 'Detections', 'Notes', 'Packers'])
             existing_data = list(reader)
     except FileNotFoundError:
         pass  # If the file doesn't exist, it will be created later
@@ -73,9 +73,10 @@ def update_detection_data(data):
         for item in existing_data:
             if item['Name'] == technique_name:
                 # If notes are different, update both notes and number_of_detections
-                if item['Notes'] != notes and notes != None:
-                    item['Notes'] = item['Notes'] + ' - ' + notes
-                    item['Detections'] = str(int(item['Detections']) + 1)
+                if notes != None:
+                  if notes not in item['Notes']:
+                      item['Notes'] = item['Notes'] + ' - ' + notes
+                      item['Detections'] = str(int(item['Detections']) + 1)
                 # If notes are the same, only update the number_of_detections
                 else:
                     item['Detections'] = str(int(item['Detections']) + 1)
@@ -85,13 +86,14 @@ def update_detection_data(data):
             'Family': technique_family,
             'Name': technique_name,
             'Detections': '1',
-            'Notes': notes
+            'Notes': notes,
+            'Packers': args.save.lower().split('/')[-1]
         }
         existing_data.append(new_row)
 
     # Write the updated data back to the CSV file
     with open(f'{args.save}.csv', mode='w', newline='') as file:
-        fieldnames = ['Family', 'Name', 'Detections', 'Notes']
+        fieldnames = ['Family', 'Name', 'Detections', 'Notes', 'Packers']
         writer = csv.DictWriter(file, fieldnames=fieldnames)
 
         writer.writerows(existing_data)
@@ -101,10 +103,10 @@ def on_message(message, data):
     '''Callback to receive and log messages from Frida server'''
 
     if message['type'] == 'send':
-       technique_family = re.sub('[\[\]]', '', message['payload'].split(']')[0])
-       console.print(message['payload'], style=f'color({techniques_colors[technique_family]})')
-    if (args.save != None):
-       update_detection_data(message['payload'])
+      technique_family = re.sub('[\[\]]', '', message['payload'].split(']')[0])
+      console.print(message['payload'], style=f'color({techniques_colors[technique_family]})')
+      if (args.save != None):
+        update_detection_data(message['payload'])
     else:
       print("[on_message] message:", message, "data:", data)
 
@@ -142,6 +144,7 @@ def remote_instrumentation(program, host, port):
       print(device)
       pid = device.spawn(program)
       session = device.attach(pid)
+      session.enable_child_gating()
     except Exception as error:
       console.log(f'[red1]Error during remote process spawning! Check the host, port and file path')
       console.log(error)
@@ -160,6 +163,7 @@ def local_instrumentation(program):
       device = frida.get_local_device()
       pid = device.spawn(program)
       session = device.attach(pid)
+      session.enable_child_gating()
     except Exception as error:
       console.log(f'[red1]Error during local process spawning! File \'{program}\' could not be opened')
       console.log(error)
@@ -193,7 +197,7 @@ if __name__ == "__main__":
 
     if (args.save != None):
        with open(f'{args.save}.csv', mode='w') as f:
-          writer = csv.DictWriter(f, fieldnames=['Family', 'Name', 'Detections', 'Notes'])
+          writer = csv.DictWriter(f, fieldnames=['Family', 'Name', 'Detections', 'Notes', 'Packers'])
           writer.writeheader()
 
     if args.subcommand == 'remote':

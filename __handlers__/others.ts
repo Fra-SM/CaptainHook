@@ -22,6 +22,7 @@
   
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     const addr_CsrGetProcessId = Module.getExportByName('ntdll.dll', 'CsrGetProcessId');
     const fun_CsrGetProcessId = new NativeFunction(addr_CsrGetProcessId, 'int32', []);
@@ -42,7 +43,9 @@
           },
 
           onLeave(retval) {
-              if (!appModules.has(this.returnAddress) || retval.toInt32() != 0)
+              if ((!appModules.has(this.returnAddress) &&
+                  onlyAppCode) || 
+                  retval.toInt32() != 0)
                   return;
               //complete check
               /* if (this.SLID == windows_slid) */
@@ -59,13 +62,15 @@
           },
 
           onLeave(retval) {
-              if (!appModules.has(this.returnAddress) || retval.toInt32() != 0)
+              if ((!appModules.has(this.returnAddress) &&
+                  onlyAppCode) || 
+                  retval.toInt32() != 0)
                   return;
               //complete check
               //let SLID = this.SLID.isNull() ? new Uint8Array([0x0]) : new Uint8Array(this.SLID);
               /* if (SLID == WINDOWS_SLID) ... */
               this.pGenuineState.writeInt(0); //fake genuine installation state
-              send("[Others] SLIsGenuineLocalEx - Pirated Windows check");
+              send("[Others] SLIsGenuineLocal - Pirated Windows check");
           }
         });
     } catch (error) {
@@ -80,7 +85,9 @@
           },
 
           onLeave(retval) {
-              if (!appModules.has(this.returnAddress) || retval.toInt32() != 0)
+              if ((!appModules.has(this.returnAddress) &&
+                  onlyAppCode) || 
+                  retval.toInt32() != 0)
                   return;
               send("[Others] GetPwrCapabilities");
               //all BOOLEAN (BYTE) members
@@ -113,7 +120,38 @@
       },
   
       onLeave(retval) {
-          if (!appModules.has(this.returnAddress) || retval.toInt32() === 0)
+          if ((!appModules.has(this.returnAddress) &&
+              onlyAppCode) || 
+              retval.toInt32() === 0)
+              return;
+          if (isInsideBlockInput && blockInputFlag)
+              send("[Others] BlockInput");
+          
+          if (lastBlockInputRetval)
+          {
+              retval.replace(ptr(0));
+              lastBlockInputRetval = false;
+          }
+          else
+          {
+              retval.replace(ptr(1));
+              lastBlockInputRetval = true;
+          }          
+      }
+    });
+
+    const NtUserBlockInput = Module.getExportByName(null, 'NtUserBlockInput');
+    Interceptor.attach(NtUserBlockInput, {
+      onEnter(args) {
+          this.fBlockIt = args[0].toInt32(); //BOOL fBlockIt
+          blockInputFlag = this.fBlockIt;
+          isInsideBlockInput = true;
+      },
+  
+      onLeave(retval) {
+          if ((!appModules.has(this.returnAddress) &&
+              onlyAppCode) || 
+              retval.toInt32() === 0)
               return;
           if (isInsideBlockInput && blockInputFlag)
               send("[Others] BlockInput");
@@ -134,20 +172,22 @@
     const NtQueryLicenseValue = Module.getExportByName('ntdll.dll', 'NtQueryLicenseValue');
     Interceptor.attach(NtQueryLicenseValue, {
       onEnter(args) {
-          if (!appModules.has(this.returnAddress))
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
               return;
           this.ValueName = args[0].add(4).readPointer().readUtf16String(); //PUNICODE_STRING ValueName
           this.data = args[2];
-          this.dataSize = args[3].readU32();
+          //this.dataSize = args[3].readU32();
       },
 
       onLeave(retval) {
-          if (!appModules.has(this.returnAddress) || retval.toInt32() != 0)
+          if ((!appModules.has(this.returnAddress) &&
+              onlyAppCode) || 
+              retval.toInt32() != 0)
               return;
           if (this.ValueName === "Kernel-VMDetection-Private")
           {
               send("[Others] NtQueryLicenseValue(Kernel-VMDetection-Private)");
-              this.data.writeByteArray(Array(this.dataSize).fill(0x0));
+              //this.data.writeByteArray(Array(this.dataSize).fill(0x0));
           }
       },
     });
@@ -155,9 +195,9 @@
     const GetDriveTypeA = Module.getExportByName('Kernel32.dll', 'GetDriveTypeA');
     Interceptor.attach(GetDriveTypeA, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Others] GetDriveTypeA");
+        send("[Others] GetDriveType");
         if (retval.toUInt32() === 2) //DRIVE_REMOVABLE
             retval.replace(ptr(0)); //fake DRIVE_UNKNOWN
       }
@@ -166,9 +206,9 @@
     const GetDriveTypeW = Module.getExportByName('Kernel32.dll', 'GetDriveTypeW');
     Interceptor.attach(GetDriveTypeW, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        send("[Others] GetDriveTypeW");
+        send("[Others] GetDriveType");
         if (retval.toUInt32() === 2) //DRIVE_REMOVABLE
             retval.replace(ptr(0)); //fake DRIVE_UNKNOWN
       }
@@ -183,11 +223,13 @@
           },
 
           onLeave(retval) {
-            if (!appModules.has(this.returnAddress) || retval.toInt32() !== 0)
+            if ((!appModules.has(this.returnAddress) &&
+                onlyAppCode) || 
+                retval.toInt32() !== 0)
                 return;
             if (this.networkType == 2424832) //WNNC_NET_RDR2SAMPLE
             {
-                send("[Others] WNetGetProviderNameA - replaced provider name: " + this.providerName.readAnsiString());
+                send("[Others] WNetGetProviderName - replaced provider name: " + this.providerName.readAnsiString());
                 this.providerName.writeAnsiString('meow');    
             }
           }
@@ -201,11 +243,13 @@
           },
 
           onLeave(retval) {
-            if (!appModules.has(this.returnAddress) || retval.toInt32() !== 0)
+            if ((!appModules.has(this.returnAddress) &&
+                onlyAppCode) || 
+                retval.toInt32() !== 0)
                 return;
             if (this.networkType == 2424832) //WNNC_NET_RDR2SAMPLE
             {
-                send("[Others] WNetGetProviderNameW - replaced provider name: " + this.providerName.readUtf16String());
+                send("[Others] WNetGetProviderName - replaced provider name: " + this.providerName.readUtf16String());
                 this.providerName.writeUtf16String('meow');    
             }
           }
@@ -221,7 +265,9 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.isNull())
+        if ((!appModules.has(this.returnAddress) && 
+            onlyAppCode) || 
+            retval.isNull())
             return;
         if (this.processPid === csrssPid)
         {
@@ -239,7 +285,9 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            retval.isNull())
             return;
         if (this.flAllocationType === 2097152) //MEM_WRITE_WATCH (0x00200000)
             IS_MEM_WRITE_WATCH = true;
@@ -256,12 +304,14 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            retval.isNull())
             return;
         if (this.flAllocationType === 2097152) //MEM_WRITE_WATCH (0x00200000)
             IS_MEM_WRITE_WATCH = true;
         if (this.flProtect === 256) //PAGE_GUARD (0x100)
-            send("[Others] VirtualAllocEx(PAGE_GUARD)");
+            send("[Others] VirtualAlloc(PAGE_GUARD)");
     }
     });
 
@@ -272,7 +322,9 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.toInt32() === 0)
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            retval.toInt32() === 0)
             return;
         if (this.flNewProtect === 256) //PAGE_GUARD (0x100)
             send("[Others] VirtualProtect(PAGE_GUARD)");
@@ -286,10 +338,12 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.toInt32() === 0)
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            retval.toInt32() === 0)
             return;
         if (this.flNewProtect === 256) //PAGE_GUARD (0x100)
-            send("[Others] VirtualProtectEx(PAGE_GUARD)");
+            send("[Others] VirtualProtect(PAGE_GUARD)");
     }
     });
 
@@ -300,7 +354,9 @@
       },  
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.toUInt32() !== 0)
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            retval.toUInt32() !== 0)
             return;
         for (let range of Process.enumerateMallocRanges())
             if (this.lpBaseAddress > range.base.toInt32() &&
@@ -314,6 +370,31 @@
     }
     });
 
+    const SuspendThread = Module.getExportByName('Kernel32.dll', 'SuspendThread');
+    Interceptor.attach(SuspendThread, {
+      onLeave(retval) {
+        send("[Others] SuspendThread");
+        return;
+      },
+    });
+
+    const NtYieldExecution = Module.getExportByName('ntdll.dll', 'NtYieldExecution');
+    Interceptor.attach(NtYieldExecution, {
+      onLeave(retval) {
+        send("[Others] NtYieldExecution");
+        retval.replace(ptr(0x40000024)); //return STATUS_NO_YIELD_PERFORMED
+      },
+    });
+
+    const NtSetDebugFilterState = Module.getExportByName('ntdll.dll', 'NtSetDebugFilterState');
+    Interceptor.attach(NtSetDebugFilterState, {
+      onLeave(retval) {
+        send("[Others] NtSetDebugFilterState");
+        retval.replace(ptr(0xC0000022)); //return STATUS_ACCESS_DENIED
+      },
+    });
+
+    
     /**
      * Called synchronously when about to return from printf.
      *

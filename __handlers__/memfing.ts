@@ -22,6 +22,7 @@
     
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    //const onlyAppCode = false;
 
     //https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/peb/index.htm
     const BeingDebuggedOffset = 0x02;

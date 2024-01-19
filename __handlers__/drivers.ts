@@ -22,6 +22,7 @@
   
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     let drivers_blacklist = [
         //"vboxnetadp6.sys",
@@ -57,14 +58,15 @@
         "vioser.sys",
         "viostor.sys",
         "vbox",
-        "vmware"
+        "vmware",
+        "hyper"
     ];
 
     //we put "null" as these APIs can reside in different modules depending on the Windows version
     const EnumDeviceDrivers = Module.getExportByName(null, 'EnumDeviceDrivers');
     Interceptor.attach(EnumDeviceDrivers, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Drivers] EnumDeviceDrivers");
       }
@@ -78,12 +80,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let d of drivers_blacklist) {
             if (this.driver.toLowerCase().includes(d))
             {
-                send("[Drivers] GetDeviceDriverBaseNameA - driver checked: " + this.driver);
+                send("[Drivers] GetDeviceDriverBaseName - driver checked: " + this.driver);
                 //replace the driver's name if blacklisted
                 this.lpFilename.writeAnsiString('meow.sys');
                 //console.log(this.lpFilename.readAnsiString());
@@ -100,12 +102,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let d of drivers_blacklist) {
             if (this.driver.toLowerCase().includes(d))
             {
-                send("[Drivers] GetDeviceDriverBaseNameW - driver checked: " + this.driver);
+                send("[Drivers] GetDeviceDriverBaseName - driver checked: " + this.driver);
                 //replace the driver's name if blacklisted
                 this.lpFilename.writeUtf16String('meow.sys');
                 //console.log(this.lpFilename.readUtf16String());
@@ -122,12 +124,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let d of drivers_blacklist) {
             if (this.driver.toLowerCase().includes(d))
             {
-                send("[Drivers] GetDeviceDriverFileNameA - driver checked: " + this.driver);
+                send("[Drivers] GetDeviceDriverFileName - driver checked: " + this.driver);
                 //replace the driver's name if blacklisted
                 this.lpFilename.writeAnsiString('meow.sys');
                 //console.log(this.lpFilename.readAnsiString());
@@ -144,12 +146,12 @@
       },
    
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         for (let d of drivers_blacklist) {
             if (this.driver.toLowerCase().includes(d))
             {
-                send("[Drivers] GetDeviceDriverFileNameW - driver checked: " + this.driver);
+                send("[Drivers] GetDeviceDriverFileName - driver checked: " + this.driver);
                 //replace the driver's name if blacklisted
                 this.lpFilename.writeUtf16String('meow.sys');
                 //console.log(this.lpFilename.readUtf16String());

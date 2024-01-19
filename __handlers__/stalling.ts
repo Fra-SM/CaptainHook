@@ -22,6 +22,7 @@
     
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    //const onlyAppCode = true;
 
     //the following 3 function hooks could in theory be removed since the respective functions
     //call NtDelayExecution under the hood, we keep them for the sake of results specificity
@@ -30,7 +31,7 @@
       onEnter(args) {
         if (!appModules.has(this.returnAddress))
             return;
-        //send("Beep frequency: " + args[0].toUInt32()); //DWORD dwFreq
+        //console.log("Beep frequency: " + args[0].toUInt32()); //DWORD dwFreq
         send("[Stalling] Beep - duration: " + args[1].toUInt32()); //DWORD dwDuration
         args[1] = ptr(0); //modified argument
       }
@@ -55,7 +56,7 @@
             return;
         let duration = args[0].toUInt32();
         if (duration > 0)
-          send("[Stalling] SleepEx - duration: " + duration); //DWORD dwMilliseconds
+          send("[Stalling] Sleep - duration: " + duration); //DWORD dwMilliseconds
         args[0] = ptr(0); //modified argument
       }
     });
@@ -79,7 +80,7 @@
             return;
         let duration = args[1].toUInt32();
         if (duration > 0)
-          send("[Stalling] WaitForSingleObjectEx - duration: " + duration); //DWORD dwMilliseconds
+          send("[Stalling] WaitForSingleObject - duration: " + duration); //DWORD dwMilliseconds
         args[1] = ptr(0); //modified argument
       }
     });
@@ -103,7 +104,7 @@
             return;
         let duration = args[3].toUInt32();
         if (duration > 0)
-          send("[Stalling] WaitForMultipleObjectsEx - duration: " + duration); //DWORD dwMilliseconds
+          send("[Stalling] WaitForMultipleObjects - duration: " + duration); //DWORD dwMilliseconds
         args[3] = ptr(0); //modified argument
       }
     });
@@ -145,7 +146,7 @@
       onEnter(args) {
         if (!appModules.has(this.returnAddress))
             return;
-        send("[Stalling] SetWaitableTimerEx - timeout: " + args[1].readLong()); //const LARGE_INTEGER *lpDueTime
+        send("[Stalling] SetWaitableTimer - timeout: " + args[1].readLong()); //const LARGE_INTEGER *lpDueTime
         args[1] = ptr(0); //modified argument
       }
     });
@@ -192,7 +193,7 @@
       onEnter(args) {
         if (!appModules.has(this.returnAddress))
             return;
-        send("[Stalling] IcmpSendEcho2 - timeout: " + args[10].toUInt32()); //DWORD Timeout
+        send("[Stalling] IcmpSendEcho - timeout: " + args[10].toUInt32()); //DWORD Timeout
         args[10] = ptr(0); //modified argument
       }
     });
@@ -202,7 +203,7 @@
       onEnter(args) {
         if (!appModules.has(this.returnAddress))
             return;
-        send("[Stalling] IcmpSendEcho2Ex - timeout: " + args[11].toUInt32()); //DWORD Timeout
+        send("[Stalling] IcmpSendEcho - timeout: " + args[11].toUInt32()); //DWORD Timeout
         args[11] = ptr(0); //modified argument
       }
     });

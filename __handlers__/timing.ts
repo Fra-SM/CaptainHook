@@ -38,6 +38,7 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = false;
 
     let LAST_GETTICKCOUNT_UPTIME = 33840000; //9.4 hours uptime
     let GETTICKCOUNT_DELTA = 10;
@@ -72,7 +73,7 @@
     const GetTickCount = Module.getExportByName('Kernel32.dll', 'GetTickCount');
     Interceptor.attach(GetTickCount, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Timing] GetTickCount - original uptime: " + retval.toUInt32());
         retval.replace(ptr(LAST_GETTICKCOUNT_UPTIME)); 
@@ -83,7 +84,7 @@
     const GetTickCount64 = Module.getExportByName('Kernel32.dll', 'GetTickCount64');
     Interceptor.attach(GetTickCount64, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Timing] GetTickCount64 - original uptime: " + retval);
         retval.replace(ptr(LAST_GETTICKCOUNT_UPTIME)); 
@@ -94,7 +95,7 @@
     const NtGetTickCount = Module.getExportByName('ntdll.dll', 'NtGetTickCount');
     Interceptor.attach(NtGetTickCount, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Timing] NtGetTickCount - original uptime: " + retval);
         retval.replace(ptr(LAST_NTGETTICKCOUNT_UPTIME)); 
@@ -105,8 +106,8 @@
     const timeGetTime = Module.getExportByName('Winmm.dll', 'timeGetTime');
     Interceptor.attach(timeGetTime, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-            return;
+        /* if (!appModules.has(this.returnAddress))
+            return; */
         send("[Timing] timeGetTime - original uptime: " + retval.toUInt32());
         retval.replace(ptr(LAST_TIMEGETTIME_UPTIME)); 
         LAST_TIMEGETTIME_UPTIME = LAST_TIMEGETTIME_UPTIME + TIMEGETTIME_DELTA;
@@ -119,9 +120,9 @@
         this.pmmt = args[0]; //LPMMTIME pmmt
       },
 
-      onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-            return;
+      onLeave() {
+        /* if (!appModules.has(this.returnAddress))
+            return; */
         send("[Timing] timeGetSystemTime - original uptime: " + this.pmmt.add(4).readUInt()); //DWORD ms
         this.pmmt.add(4).writeUInt(LAST_TIMEGETSYSTEMTIME_UPTIME); 
         LAST_TIMEGETSYSTEMTIME_UPTIME = LAST_TIMEGETSYSTEMTIME_UPTIME + TIMEGETSYSTEMTIME_DELTA;
@@ -135,7 +136,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.toInt32() === 0)
+        if (//!appModules.has(this.returnAddress) || 
+            retval.toInt32() === 0)
             return;
         send("[Timing] QueryUnbiasedInterruptTime - original time: " + this.UnbiasedTime.readULong());
         this.UnbiasedTime.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
@@ -151,8 +153,8 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-            return;
+        /* if (!appModules.has(this.returnAddress))
+            return; */
         send("[Timing] QueryInterruptTime - original time: " + this.lpInterruptTime.readULong());
         this.lpInterruptTime.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
         LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
@@ -166,8 +168,8 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-            return;
+        /* if (!appModules.has(this.returnAddress))
+            return; */
         send("[Timing] QueryInterruptTimePrecise - original time: " + this.lpInterruptTimePrecise.readULong());
         this.lpInterruptTimePrecise.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
         LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
@@ -181,8 +183,8 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
-            return;
+        /* if (!appModules.has(this.returnAddress))
+            return; */
         send("[Timing] QueryUnbiasedInterruptTimePrecise - original time: " + this.lpUnbiasedInterruptTimePrecise.readULong());
         this.lpUnbiasedInterruptTimePrecise.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
         LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
@@ -196,7 +198,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.toInt32() === 0)
+        if (//!appModules.has(this.returnAddress) || 
+            retval.toInt32() === 0)
             return;
         var divided_time = this.lpPerformanceCount.readLong();
         send("[Timing] QueryPerformanceCounter - original counter: " + divided_time);
@@ -214,7 +217,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) || retval.toInt32() !== 0)
+        if (//!appModules.has(this.returnAddress) || 
+            retval.toInt32() !== 0)
             return;
         var divided_time = this.PerformanceCounter.readLong();
         send("[Timing] NtQueryPerformanceCounter - original counter: " + divided_time);
@@ -242,7 +246,8 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress) || this.lpSystemTime.isNull())
+        if (//!appModules.has(this.returnAddress) || 
+            this.lpSystemTime.isNull())
             return;
         if (GETSYSTEMTIME_CALLED_ONCE)
         {
@@ -279,7 +284,8 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress) || this.lpSystemTime.isNull())
+        if (//!appModules.has(this.returnAddress) || 
+            this.lpSystemTime.isNull())
             return;
         if (GETLOCALTIME_CALLED_ONCE)
         {
@@ -320,8 +326,8 @@
     },
 
     onLeave() {
-        if (!appModules.has(this.returnAddress))
-            return;
+        /* if (!appModules.has(this.returnAddress))
+            return; */
         if (GETSYSTEMTIMEASFILETIME_CALLED_ONCE)
         {
             GETSYSTEMTIMEASFILETIME_CALLED_ONCE = true;

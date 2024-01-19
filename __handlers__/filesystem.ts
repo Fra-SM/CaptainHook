@@ -20,6 +20,12 @@
      * use "this" which is an object for keeping state local to an invocation.
      */
 
+    const programPath = Process.enumerateModules()[0].path;
+    const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
+
+    let original_filename = Process.enumerateModules()[0].name;
+
     let filesystem_blacklist = [
         "malware",
         "sandbox",
@@ -36,21 +42,60 @@
         "vmhgfs.sys",
         "vmx86.sys",
         "hgfs.sys",
+        "hyper",
         "prleth.sys",
         "prlfs.sys",
         "prlmouse.sys",
         "prlvideo.sys",
         "prltime.sys",
         "prl_pv32.sys",
-        "prl_paravirt_32.sys"
+        "prl_paravirt_32.sys",
+        "sbiedll",
+        "ntice",
+        "sice",
+        "ntfire",
+        "debug",
+        original_filename
     ];
 
     let products_blacklist = [
-        "wireshark",
-        "ida",
+        "ollydbg",					 // OllyDebug debugger
+        "processhacker",			 // Process Hacker
+        "tcpview",					 // Part of Sysinternals Suite
+        "autoruns",					 // Part of Sysinternals Suite
+        "filemon",					 // Part of Sysinternals Suite
+        "procmon",					 // Part of Sysinternals Suite
+        "regmon",					 // Part of Sysinternals Suite
+        "procexp",					 // Part of Sysinternals Suite
+        "ida",						 // IDA Pro Interactive Disassembler
+        "immunitydebugger",			 // ImmunityDebugger
+        "wireshark",				 // Wireshark packet sniffer
+        "dumpcap",					 // Network traffic dump tool
+        "hookexplorer",				 // Find various types of runtime hooks
+        "importrec",				 // Import Reconstructor
+        "petools",					 // PE Tool
+        "lordpe",					 // LordPE
+        "sysinspector",				 // ESET SysInspector
+        "proc_analyzer",			 // Part of SysAnalyzer iDefense
+        "sysanalyzer",				 // Part of SysAnalyzer iDefense
+        "sniff_hit",				 // Part of SysAnalyzer iDefense
+        "windbg",					 // Microsoft WinDbg
+        "joebox",                    // Joe Sandbox
+        "resourcehacker",			 // Resource Hacker
+        "x32dbg",					 // x32dbg
+        "x64dbg",					 // x64dbg
+        "fiddler",					 // Fiddler
+        "httpdebugger",				 // Http Debugger
+        "netmon",					 // Part of Sysinternals Suite
         "ghidra",
-        "ollydbg",
-        "windbg",
+        "tcpdump",
+        "netstat",					 
+        "cain",						 
+        "httpanalyzerstdv7",
+        "apimonitor",
+        "scylla",	
+        "cheatengine",
+        "frida",
         "peid",
         "pestudio",
         "pesieve",
@@ -69,13 +114,11 @@
         "cff explorer",
         "malcat",
         "mimikatz",
-        "yara"
-    ];
+        "yara",
+        "titanhide"
+        ];
 
     const all_blacklist = [...filesystem_blacklist, ...products_blacklist];
-
-    const programPath = Process.enumerateModules()[0].path;
-    const appModules = new ModuleMap(m => m.path.startsWith(programPath));
 
     const GetModuleFileNameA = Module.getExportByName("Kernel32.dll", 'GetModuleFileNameA');
     Interceptor.attach(GetModuleFileNameA, {
@@ -84,15 +127,16 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toUInt32() !== 0)
-        for (let f of filesystem_blacklist)
+        for (let f of all_blacklist)
             if (this.lpFilename.readAnsiString().toLowerCase().includes(f))
             {
                 //retval.replace(ptr(0)); //fake function failure
-                this.lpFilename.writeAnsiString('D:\\meow');
-                send("[Filesystem] GetModuleFileNameA - replaced file path: " + this.lpFilename.readAnsiString());
+                send("[Filesystem] GetModuleFileName - replaced file path: " + this.lpFilename.readAnsiString());
+                if (!this.lpFilename.readAnsiString().toLowerCase().includes(original_filename))
+                    this.lpFilename.writeAnsiString('D:\\meow');
             }       
       }
     });
@@ -104,14 +148,15 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toUInt32() !== 0)
-            for (let f of filesystem_blacklist)
+            for (let f of all_blacklist)
                 if (this.lpFilename.readUtf16String().toLowerCase().includes(f))
                 {
-                    this.lpFilename.writeUtf16String('D:\\meow');
-                    send("[Filesystem] GetModuleFileNameW - replaced file path: " + this.lpFilename.readUtf16String());
+                    send("[Filesystem] GetModuleFileName - replaced file path: " + this.lpFilename.readUtf16String());
+                    if (!this.lpFilename.readUtf16String().toLowerCase().includes(original_filename))
+                        this.lpFilename.writeUtf16String('D:\\meow');
                 }       
       }
     });
@@ -123,14 +168,15 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toInt32() !== 0)
-            for (let f of filesystem_blacklist)
+            for (let f of all_blacklist)
                 if (this.lpFilename.readAnsiString().toLowerCase().includes(f))
                 {
-                    this.lpFilename.writeAnsiString('D:\\meow');
-                    send("[Filesystem] QueryFullProcessImageNameA - replaced file path: " + this.lpFilename.readAnsiString());
+                    send("[Filesystem] QueryFullProcessImageName - replaced file path: " + this.lpFilename.readAnsiString());
+                    if (!this.lpFilename.readAnsiString().toLowerCase().includes(original_filename))
+                        this.lpFilename.writeAnsiString('D:\\meow');
                 }       
       }
     });
@@ -142,14 +188,15 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toInt32() !== 0)
-            for (let f of filesystem_blacklist)
+            for (let f of all_blacklist)
                 if (this.lpFilename.readUtf16String().toLowerCase().includes(f))
                 {
-                    this.lpFilename.writeUtf16String('D:\\meow');
-                    send("[Filesystem] QueryFullProcessImageNameW - replaced file path: " + this.lpFilename.readUtf16String());
+                    send("[Filesystem] QueryFullProcessImageName - replaced file path: " + this.lpFilename.readUtf16String());
+                    if (!this.lpFilename.readUtf16String().toLowerCase().includes(original_filename))
+                        this.lpFilename.writeUtf16String('D:\\meow');
                 }       
       }
     });
@@ -161,14 +208,15 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toUInt32() !== 0)
-            for (let f of filesystem_blacklist)
+            for (let f of all_blacklist)
                 if (this.lpFilename.readAnsiString().toLowerCase().includes(f))
                 {
-                    this.lpFilename.writeAnsiString('D:\\meow');
-                    send("[Filesystem] GetProcessImageFileNameA - replaced file path: " + this.lpFilename.readAnsiString());
+                    send("[Filesystem] GetProcessImageFileName - replaced file path: " + this.lpFilename.readAnsiString());
+                    if (!this.lpFilename.readAnsiString().toLowerCase().includes(original_filename))
+                        this.lpFilename.writeAnsiString('D:\\meow');
                 }       
       }
     });
@@ -180,32 +228,194 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toUInt32() !== 0)
-            for (let f of filesystem_blacklist)
+            for (let f of all_blacklist)
                 if (this.lpFilename.readUtf16String().toLowerCase().includes(f))
                 {
-                    this.lpFilename.writeUtf16String('D:\\meow');
-                    send("[Filesystem] GetProcessImageFileNameW - replaced file path: " + this.lpFilename.readUtf16String());
+                    send("[Filesystem] GetProcessImageFileName - replaced file path: " + this.lpFilename.readUtf16String());
+                    if (!this.lpFilename.readUtf16String().toLowerCase().includes(original_filename))
+                        this.lpFilename.writeUtf16String('D:\\meow');
+                    
                 }       
       }
     });
     
+    const OpenFile = Module.getExportByName('Kernel32.dll', 'OpenFile');
+    Interceptor.attach(OpenFile, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCSTR lpFileName
+        console.log(this.fileName.readAnsiString());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readAnsitring().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] OpenFile - file checked: ${this.fileName.readAnsiString()}`);
+                if (!this.fileName.readAnsiString().toLowerCase().includes(original_filename))
+                    this.fileName.writeAnsiString('meow');
+                //console.log(this.fileName.readAnsiString());
+            }   
+        }
+      },
+    });
+
+    const CreateFileA = Module.getExportByName('Kernel32.dll', 'CreateFileA');
+    Interceptor.attach(CreateFileA, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCSTR lpFileName
+        console.log(this.fileName.readAnsiString());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readAnsiString().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] CreateFile - file checked: ${this.fileName.readAnsiString()}`);
+                if (!this.fileName.readAnsiString().toLowerCase().includes(original_filename))
+                    this.fileName.writeAnsiString('\\\.\\meow');
+                //console.log(this.fileName.readAnsiString());
+            }   
+        }
+      },
+    });
+
+    const CreateFileW = Module.getExportByName('Kernel32.dll', 'CreateFileW');
+    Interceptor.attach(CreateFileW, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCWSTR lpFileName
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readUtf16String().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] CreateFile - file checked: ${this.fileName.readUtf16String()}`);
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('\\\.\\meow');
+                //console.log(this.fileName.readUtf16String());
+            }   
+        }
+      },
+    });
+
+    const CreateFile2 = Module.getExportByName('Kernel32.dll', 'CreateFile2');
+    Interceptor.attach(CreateFile2, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCWSTR lpFileName
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readUtf16String().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] CreateFile - file checked: ${this.fileName.readUtf16String()}`);
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('meow');
+                //console.log(this.fileName.readUtf16String());
+            }   
+        }
+      },
+    });
+
+    const GetFileAttributesA = Module.getExportByName('Kernel32.dll', 'GetFileAttributesA');
+    Interceptor.attach(GetFileAttributesA, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCSTR lpFileName
+        console.log(this.fileName.readAnsiString());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readAnsiString().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] GetFileAttributes - file checked: ${this.fileName.readAnsiString()}`);
+                if (!this.fileName.readAnsiString().toLowerCase().includes(original_filename))
+                    this.fileName.writeAnsiString('meow');
+                //console.log(this.fileName.readAnsiString());
+            }   
+        }
+      },
+    });
+
+    const GetFileAttributesW = Module.getExportByName('Kernel32.dll', 'GetFileAttributesW');
+    Interceptor.attach(GetFileAttributesW, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCWSTR lpFileName
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readUtf16String().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] GetFileAttributes - file checked: ${this.fileName.readUtf16String()}`);
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('meow');
+                //console.log(this.fileName.readUtf16String());
+            }   
+        }
+      },
+    });
+
+    const GetFileAttributesExA = Module.getExportByName('Kernel32.dll', 'GetFileAttributesExA');
+    Interceptor.attach(GetFileAttributesExA, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCSTR lpFileName
+        console.log(this.fileName.readAnsiString());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readAnsiString().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] GetFileAttributes - file checked: ${this.fileName.readAnsiString()}`);
+                if (!this.fileName.readAnsiString().toLowerCase().includes(original_filename))
+                    this.fileName.writeAnsiString('meow');
+                //console.log(this.fileName.readAnsiString());
+            }   
+        }
+      },
+    });
+
+    const GetFileAttributesExW = Module.getExportByName('Kernel32.dll', 'GetFileAttributesExW');
+    Interceptor.attach(GetFileAttributesExW, {
+      onEnter(args) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        this.fileName = args[0]; //LPCWSTR lpFileName
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
+        {
+            if (this.fileName.readUtf16String().toLowerCase().includes(f))
+            {
+                send(`[Filesystem] GetFileAttributes - file checked: ${this.fileName.readUtf16String()}`);
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('meow');
+                //console.log(this.fileName.readUtf16String());
+            }   
+        }
+      },
+    });
+
     const NtOpenFile = Module.getExportByName('ntdll.dll', 'NtOpenFile');
     Interceptor.attach(NtOpenFile, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.fileName = args[2].add(8).readPointer().add(4).readPointer(); //ObjectAttributes->ObjectName->Buffer
-        //console.log(this.fileName.readUtf16String());
-        for (let f of filesystem_blacklist)
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
         {
             if (this.fileName.readUtf16String().toLowerCase().includes(f))
             {
                 send(`[Filesystem] NtOpenFile - file checked: ${this.fileName.readUtf16String()}`);
-                this.fileName.writeUtf16String('meow');
-                console.log(this.fileName.readUtf16String());
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('meow');
             }   
         }
       },
@@ -214,17 +424,18 @@
     const NtCreateFile = Module.getExportByName('ntdll.dll', 'NtCreateFile');
     Interceptor.attach(NtCreateFile, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.fileName = args[2].add(8).readPointer().add(4).readPointer(); //ObjectAttributes->ObjectName->Buffer
-        //console.log(this.fileName.readUtf16String());
-        for (let f of filesystem_blacklist)
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
         {
             if (this.fileName.readUtf16String().toLowerCase().includes(f))
             {
                 send(`[Filesystem] NtCreateFile - file checked: ${this.fileName.readUtf16String()}`);
-                this.fileName.writeUtf16String('meow');
-                console.log(this.fileName.readUtf16String());
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('meow');
+                //console.log(this.fileName.readUtf16String());
             }   
         }
       },
@@ -233,26 +444,28 @@
     const NtQueryAttributesFile = Module.getExportByName('ntdll.dll', 'NtQueryAttributesFile');
     Interceptor.attach(NtQueryAttributesFile, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.fileName = args[0].add(8).readPointer().add(4).readPointer(); //ObjectAttributes->ObjectName->Buffer
-        //console.log(this.fileName.readUtf16String());
-        for (let f of filesystem_blacklist)
+        console.log(this.fileName.readUtf16String());
+        for (let f of all_blacklist)
         {
             if (this.fileName.readUtf16String().toLowerCase().includes(f))
             {
                 send(`[Filesystem] NtQueryAttributesFile - file checked: ${this.fileName.readUtf16String()}`);
-                this.fileName.writeUtf16String('meow');
-                console.log(this.fileName.readUtf16String());
+                if (!this.fileName.readUtf16String().toLowerCase().includes(original_filename))
+                    this.fileName.writeUtf16String('meow');
+                //console.log(this.fileName.readUtf16String());
             }   
         }
       },
     });
 
-    const NtQueryDirectoryFileEx = Module.getExportByName('ntdll.dll', 'NtQueryDirectoryFileEx');
+    //needs fix
+    /* const NtQueryDirectoryFileEx = Module.getExportByName('ntdll.dll', 'NtQueryDirectoryFileEx');
     Interceptor.attach(NtQueryDirectoryFileEx, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.fileInfoClass = args[7]; //FILE_INFORMATION_CLASS FileInformationClass
         this.fileInfo = args[5]; //PVOID FileInformation
@@ -267,7 +480,7 @@
       },
 
       onLeave() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let NextEntryOffset = this.fileInfo.readU32();
         //while there are still files in the list (this should be fixed because it skips the first file)
@@ -292,19 +505,19 @@
                 NextEntryOffset = 0;
         }
       }
-    });
+    }); */
 
     const FindFirstFileA = Module.getExportByName('Kernel32.dll', 'FindFirstFileA');
     Interceptor.attach(FindFirstFileA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let fileName = args[0].readAnsiString(); //LPCSTR lpFileName
         let to_check = fileName !== null ? fileName.toLowerCase() : '0123456789';
         for (let f of all_blacklist) {
             if (to_check.includes(f))
             {
-                send("[Filesystem] FindFirstFileA - replaced file: " + fileName);
+                send("[Filesystem] FindFirstFile - replaced file: " + fileName);
                 //replace the file's name if blacklisted
                 const dummyFile = Memory.allocAnsiString('meow');
                 this.dummyFile = dummyFile;
@@ -317,14 +530,14 @@
     const FindFirstFileW = Module.getExportByName('Kernel32.dll', 'FindFirstFileW');
     Interceptor.attach(FindFirstFileW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let fileName = args[0].readUtf16String(); //LPCWSTR lpFileName
         let to_check = fileName !== null ? fileName.toLowerCase() : '0123456789';
         for (let f of all_blacklist) {
             if (to_check.includes(f))
             {
-                send("[Filesystem] FindFirstFileW - replaced file: " + fileName);
+                send("[Filesystem] FindFirstFile - replaced file: " + fileName);
                 //replace the file's name if blacklisted
                 const dummyFile = Memory.allocUtf16String('meow');
                 this.dummyFile = dummyFile;
@@ -337,14 +550,14 @@
     const FindFirstFileExA = Module.getExportByName('Kernel32.dll', 'FindFirstFileExA');
     Interceptor.attach(FindFirstFileExA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let fileName = args[0].readAnsiString(); //LPCSTR lpFileName
         let to_check = fileName !== null ? fileName.toLowerCase() : '0123456789';
         for (let f of all_blacklist) {
             if (to_check.includes(f))
             {
-                send("[Filesystem] FindFirstFileExA - replaced file: " + fileName);
+                send("[Filesystem] FindFirstFile - replaced file: " + fileName);
                 //replace the file's name if blacklisted
                 const dummyFile = Memory.allocAnsiString('meow');
                 this.dummyFile = dummyFile;
@@ -357,14 +570,14 @@
     const FindFirstFileExW = Module.getExportByName('Kernel32.dll', 'FindFirstFileExW');
     Interceptor.attach(FindFirstFileExW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         let fileName = args[0].readUtf16String(); //LPCWSTR lpFileName
         let to_check = fileName !== null ? fileName.toLowerCase() : '0123456789';
         for (let f of all_blacklist) {
             if (to_check.includes(f))
             {
-                send("[Filesystem] FindFirstFileExW - replaced file: " + fileName);
+                send("[Filesystem] FindFirstFile - replaced file: " + fileName);
                 //replace the file's name if blacklisted
                 const dummyFile = Memory.allocUtf16String('meow');
                 this.dummyFile = dummyFile;
@@ -381,7 +594,7 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toInt32() !== 0)
         {
@@ -389,10 +602,10 @@
             for (let f of all_blacklist) {
                 if (fileName.toLowerCase().includes(f))
                 {
-                    send("[Filesystem] FindNextFileA - replaced file: " + fileName);
+                    send("[Filesystem] FindNextFile - replaced file: " + fileName);
                     //replace the file's name if blacklisted
-                    this.outStruct.readPointer().add(44).writeUtf8String('meow');
-                    console.log(this.outStruct.readPointer().add(44).readCString())
+                    this.outStruct.add(44).writeUtf8String('meow');
+                    console.log(this.outStruct.add(44).readCString())
                 }
             }
         }
@@ -406,7 +619,7 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toInt32() !== 0)
         {
@@ -414,10 +627,10 @@
             for (let f of all_blacklist) {
                 if (fileName.toLowerCase().includes(f))
                 {
-                    send("[Filesystem] FindNextFileW - replaced file: " + fileName);
+                    send("[Filesystem] FindNextFile - replaced file: " + fileName);
                     //replace the file's name if blacklisted
-                    this.outStruct.readPointer().add(44).writeUtf16String('meow');
-                    console.log(this.outStruct.readPointer().add(44).readUtf16String())
+                    this.outStruct.add(44).writeUtf16String('meow');
+                    console.log(this.outStruct.add(44).readUtf16String())
                 }
             }
         }
@@ -434,7 +647,7 @@
         },
 
         onLeave() {
-            if (!appModules.has(this.returnAddress))
+            if (!appModules.has(this.returnAddress) && onlyAppCode)
                 return;
             if (this.property === "INSTALLPROPERTY_INSTALLEDPRODUCTNAME")
             {
@@ -442,7 +655,7 @@
                 {
                     if (this.productName.readAnsiString().toLowerCase().includes(p))
                     {
-                        send(`[Filesystem] MsiGetProductInfoA - replaced product: ${this.productName.readAnsiString()}`);
+                        send(`[Filesystem] MsiGetProductInfo - replaced product: ${this.productName.readAnsiString()}`);
                         this.productName.writeAnsiString('meow');
                         console.log(this.productName.readAnsiString());
                     }   
@@ -460,7 +673,7 @@
         },
 
         onLeave() {
-            if (!appModules.has(this.returnAddress))
+            if (!appModules.has(this.returnAddress) && onlyAppCode)
                 return;
             if (this.property === "INSTALLPROPERTY_INSTALLEDPRODUCTNAME")
             {
@@ -468,7 +681,7 @@
                 {
                     if (this.productName.readUtf16String().toLowerCase().includes(p))
                     {
-                        send(`[Filesystem] MsiGetProductInfoW - replaced product: ${this.productName.readUtf16String()}`);
+                        send(`[Filesystem] MsiGetProductInfo - replaced product: ${this.productName.readUtf16String()}`);
                         this.productName.writeUtf16String('meow');
                         console.log(this.productName.readUtf16String());
                     }   
@@ -486,7 +699,7 @@
         },
 
         onLeave() {
-            if (!appModules.has(this.returnAddress))
+            if (!appModules.has(this.returnAddress) && onlyAppCode)
                 return;
             if (this.property === "INSTALLPROPERTY_INSTALLEDPRODUCTNAME")
             {
@@ -494,7 +707,7 @@
                 {
                     if (this.productName.readAnsiString().toLowerCase().includes(p))
                     {
-                        send(`[Filesystem] MsiGetProductInfoExA - replaced product: ${this.productName.readAnsiString()}`);
+                        send(`[Filesystem] MsiGetProductInfo - replaced product: ${this.productName.readAnsiString()}`);
                         this.productName.writeAnsiString('meow');
                         console.log(this.productName.readAnsiString());
                     }   
@@ -512,7 +725,7 @@
         },
 
         onLeave() {
-            if (!appModules.has(this.returnAddress))
+            if (!appModules.has(this.returnAddress) && onlyAppCode)
                 return;
             if (this.property === "INSTALLPROPERTY_INSTALLEDPRODUCTNAME")
             {
@@ -520,7 +733,7 @@
                 {
                     if (this.productName.readUtf16String().toLowerCase().includes(p))
                     {
-                        send(`[Filesystem] MsiGetProductInfoExW - replaced product: ${this.productName.readUtf16String()}`);
+                        send(`[Filesystem] MsiGetProductInfo - replaced product: ${this.productName.readUtf16String()}`);
                         this.productName.writeUtf16String('meow');
                         console.log(this.productName.readUtf16String());
                     }   

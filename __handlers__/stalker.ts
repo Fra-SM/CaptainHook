@@ -23,7 +23,8 @@
     //main application module
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
-
+    const memfingChecks = false; //causes slow or even frozen execution if enabled
+    
     //https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/peb/index.htm
     const BeingDebuggedOffset = 0x02;
     const NumberOfProcessorsOffset = Process.pointerSize === 4 ? 0x64 : 0xB8;
@@ -106,7 +107,7 @@
     function checkMemoryFingerprintingTechniques (context) {
         var curInstruction = Instruction.parse(context.pc);
         var value = '';
-
+        
         for (let op of curInstruction.operands)
         {
             if (op.type === 'reg')
@@ -163,21 +164,24 @@
         //consider writing a "CModule" instead to improve performance
         Stalker.follow(thread.id, {
             events: {
-                exec: true //trace every instruction
+                exec: false, //trace every instruction
+                block: false,
+                compile: true
             },  
 
             transform(iterator) {
                 let instruction = iterator.next();
                 let isAppCode = appModules.has(instruction.address);
-
+                //console.log(instruction.toString());
+                
                 do {
                 if (isAppCode)
                 {
                     let opcode = new Uint8Array(instruction.address.readByteArray(1))[0];
                     
-                    //super slow execution
-                    /* if (instruction.mnemonic.includes('mov'))
-                        iterator.putCallout(checkMemoryFingerprintingTechniques); */
+                    //super slow execution if enabled
+                    if (instruction.mnemonic.includes('mov') && memfingChecks)
+                        iterator.putCallout(checkMemoryFingerprintingTechniques);
                     if (instruction.mnemonic === "sidt")
                     {
                         //console.log(instruction.toString());
@@ -202,7 +206,7 @@
                     {
                         //console.log(instruction.toString());
                         send("[CPU Fingerprinting] IN");
-                        continue; //drops the instruction
+                        //continue; //drops the instruction
                     }
                     if (instruction.mnemonic === "str")
                     {
@@ -214,55 +218,55 @@
                         //console.log(instruction.toString());
                         send("[CPU Fingerprinting] SMSW");
                     }
-                    //TODO: for the traps instruction, check the current thread backtrace to see if an exception handler was registered before
+                    //TODO: idea for the traps instruction, check the current thread backtrace to see if an exception handler was registered before
                     //check for opcode "0xcc" (204) (alternative: if (instruction.toString().includes("int3")))
                     if (opcode === 204 && instruction.size === 1)
                     {
                         console.log(instruction.toString());
                         send("[Traps] INT3");
-                        continue; //drops the instruction
+                        //continue; //drops the instruction
                     }
                     if (instruction.toString().includes("int 0x2d"))
                     {
                         console.log(instruction.toString());
                         send("[Traps] INT2D");
-                        continue; //drops the instruction
+                        //continue; //drops the instruction
                     }
-                    if (instruction.toString().includes("int 1"))
+                    if (instruction.toString().includes("int 1") || instruction.toString().includes("int1"))
                     {
                         console.log(instruction.toString());
                         send("[Traps] INT1");
-                        continue; //drops the instruction
+                        //continue; //drops the instruction
                     }
                     //check for opcode "0xf1" (241)
                     if (opcode === 241 && instruction.size === 1)
                     {
                         console.log(instruction.toString());
                         send("[Traps] ICEBP");
-                        continue; //drops the instruction
+                        //continue; //drops the instruction
                     }
                     if (instruction.mnemonic === "vpcext")
                     {
                         //console.log(instruction.toString());
                         iterator.putCallout(onVpcext);
                         send("[Traps] VPCEXT");
-                        continue; //drops the instruction
                     }
                     //invalid on x64
                     if (instruction.toString().includes("pop ss"))
                     {
                         console.log(instruction.toString());
                         send("[Traps] POP SS");
-                        continue; //drops the instruction
+                        //continue; //drops the instruction
                     }
                     if (instruction.toString().includes("popf"))
                     {
-                        console.log(instruction.toString());
+                        //console.log(instruction.toString());
                         send("[Traps] POPF");
+                        //continue;
                     }
                     if (instruction.mnemonic.includes("rdtsc"))
                     {
-                        console.log(instruction.toString());
+                        //console.log(instruction.toString());
                         send("[Timing] RDTSC");
                     }
                     /* if (instruction.toString().includes("fs"))

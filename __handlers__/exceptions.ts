@@ -22,38 +22,86 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
-    const NtClose = Module.getExportByName('ntdll.dll', 'NtClose');
-    Interceptor.attach(NtClose, {
-      onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-            return;
-        if (retval.toInt32() !== 0)
+    const addr_GetHandleInformation = Module.getExportByName('Kernel32.dll', 'GetHandleInformation');
+    const fun_GetHandleInformation = new NativeFunction(addr_GetHandleInformation, 'int', ['pointer', 'pointer']);
+    let fakeFlagsArg = Memory.alloc(Process.pointerSize);
+
+    const addr_SetHandleInformation = Module.getExportByName('Kernel32.dll', 'SetHandleInformation');
+    const fun_SetHandleInformation = new NativeFunction(addr_SetHandleInformation, 'int', ['pointer', 'int', 'int']);
+
+    let mutex = Memory.alloc(Process.pointerSize);
+    const addr_CreateMutexA = Module.getExportByName('Kernel32.dll', 'CreateMutexA');
+    const fun_CreateMutexA = new NativeFunction(addr_CreateMutexA, 'pointer', ['pointer', 'int', 'pointer']);
+
+    let event = Memory.alloc(Process.pointerSize);
+    const addr_CreateEventA = Module.getExportByName('Kernel32.dll', 'CreateEventA');
+    const fun_CreateEventA = new NativeFunction(addr_CreateEventA, 'pointer', ['pointer', 'int', 'int', 'pointer']);
+
+    /* const NtClose = Module.getExportByName('ntdll.dll', 'NtClose');
+    Interceptor.replace(NtClose, new NativeCallback((handle) => {
+      if (fun_GetHandleInformation(handle, fakeFlagsArg) == 0)
         {
-            send("[Exception Handling] NtClose(INVALID_HANDLE)");
-            retval.replace(ptr(0)); //fake STATUS_SUCCESS
+          console.log(handle);
+          send("[Exception Handling] NtClose(INVALID_HANDLE)");
+          mutex = fun_CreateMutexA(NULL, 0, NULL);
+          event = fun_CreateEventA(NULL, 0, 0 , NULL); 
+          handle = event;
+          console.log(handle);
         }
-      }
+      return 0;
+    }, 'int', ['pointer'])); */
+
+    const NtClose = Module.getExportByName('Ntdll.dll', 'NtClose');
+    Interceptor.attach(NtClose, {
+      onEnter(args) {
+        this.isHandleInvalid = false;
+        if (fun_GetHandleInformation(args[0], fakeFlagsArg) == 0)
+        {
+          this.isHandleInvalid = true;
+          console.log(args[0]);
+          send("[Exception Handling] NtClose(INVALID_HANDLE)");
+          const event = fun_CreateEventA(NULL, 0, 0 , NULL); 
+          //fun_SetHandleInformation(event, 0x2, 0);
+          args[0] = event;
+          console.log(args[0]);
+        } 
+      },
+      onLeave(retval) {
+        //console.log(retval.toInt32()); //returns 0xC0000008
+        if (retval.toInt32() === 0 && this.isHandleInvalid)
+          retval.replace(ptr(0xC0000008)); //fake error
+      },
     });
 
     const CloseHandle = Module.getExportByName('Kernel32.dll', 'CloseHandle');
     Interceptor.attach(CloseHandle, {
-      onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
-            return;
-        if (retval.toInt32() === 0)
+      onEnter(args) {
+        this.isHandleInvalid = false;
+        if (fun_GetHandleInformation(args[0], fakeFlagsArg) == 0)
         {
-            send("[Exception Handling] CloseHandle(INVALID_HANDLE)");
-            retval.replace(ptr(1)); //fake success
-        }
-      }
+          this.isHandleInvalid = true;
+          console.log(args[0]);
+          send("[Exception Handling] CloseHandle(INVALID_HANDLE)");
+          const mutex = fun_CreateMutexA(NULL, 0, NULL);
+          const event = fun_CreateEventA(NULL, 0, 0 , NULL);
+          fun_SetHandleInformation(event, 0x2, 0);
+          args[0] = event;
+          console.log(args[0]);
+        } 
+      },
+      onLeave(retval) {
+        if (retval.toInt32() !== 0 && this.isHandleInvalid)
+          retval.replace(ptr(0));
+      },
     });
 
     //only evasive in combo with other techniques
     const SetUnhandledExceptionFilter = Module.getExportByName('Kernel32.dll', 'SetUnhandledExceptionFilter');
     Interceptor.attach(SetUnhandledExceptionFilter, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Exception Handling] SetUnhandledExceptionFilter");
       }
@@ -62,22 +110,22 @@
     const OutputDebugStringA = Module.getExportByName('Kernel32.dll', 'OutputDebugStringA');
     Interceptor.attach(OutputDebugStringA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.str = args[0].readAnsiString(); //LPCSTR lpOutputString
         if (this.str !== null)
-            send("[Exception Handling] OutputDebugStringA - string: " + this.str);
+            send("[Exception Handling] OutputDebugString - string: " + this.str);
       }
     });
 
     const OutputDebugStringW = Module.getExportByName('Kernel32.dll', 'OutputDebugStringW');
     Interceptor.attach(OutputDebugStringW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.str = args[0].readUtf16String(); //LPCWSTR lpOutputString
         if (this.str !== null)
-            send("[Exception Handling] OutputDebugStringW - string: " + this.str);
+            send("[Exception Handling] OutputDebugString - string: " + this.str);
       }
     });
 
@@ -89,7 +137,7 @@
     const SetConsoleCtrlHandler = Module.getExportByName('Kernel32.dll', 'SetConsoleCtrlHandler');
     Interceptor.attach(SetConsoleCtrlHandler, {
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (retval.toInt32() !== 0)
         {
@@ -102,7 +150,7 @@
     const GenerateConsoleCtrlEvent = Module.getExportByName('Kernel32.dll', 'GenerateConsoleCtrlEvent');
     Interceptor.attach(GenerateConsoleCtrlEvent, {
       onEnter() {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         if (isCtrlHandlerSet)
             send("[Exception Handling] GenerateConsoleCtrlEvent_after_SetConsoleCtrlHandler");
@@ -112,7 +160,7 @@
     const RaiseException = Module.getExportByName('Kernel32.dll', 'RaiseException');
     Interceptor.attach(RaiseException, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress))
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         this.excCode = args[0].toUInt32();
         if (this.excCode === 1073807366 || this.excCode === 1073807370)

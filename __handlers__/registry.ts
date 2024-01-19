@@ -22,6 +22,7 @@
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
+    const onlyAppCode = true;
 
     let registry_blacklist = [
         "vbox", //Virtual Box
@@ -41,9 +42,10 @@
         "vmic", //Hyper-V
         "virtualmachine",
         "virtual machine",
-        "hyper-v",
+        "hyper",
         "sandboxie", //Sandboxie
-        "sbiedrv"
+        "sbiedrv",
+        "debug",
     ];
 
     function checkEmulationRegistry(reg, func, isUtf16)
@@ -125,11 +127,13 @@
       onEnter(args) {
         //this prevents also calls happening via the higher level API RegOpenKey to be logged
         //hooks for such higher-level APIs should be defined separately
-        if (!appModules.has(this.returnAddress) || args[2].isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            args[2].isNull())
             return;
         //x32/x64 supported
         this.regKey = args[2].add(4 + Process.pointerSize).readPointer().add(4).readPointer(); //ObjectAttributes->ObjectName->Buffer
-        //console.log(this.regKey.readUtf16String());
+        console.log(this.regKey.readUtf16String());
         for (let r of registry_blacklist)
         {
             if (this.regKey.readUtf16String().toLowerCase().includes(r))
@@ -149,22 +153,24 @@
       onEnter(args) {
         //this prevents also calls happening via the higher level API RegOpenKey to be logged
         //hooks for such higher-level APIs should be defined separately
-        if (!appModules.has(this.returnAddress) || args[2].isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) || 
+            args[2].isNull())
             return;
         //x32/x64 supported
         this.regKey = args[2].add(4 + Process.pointerSize).readPointer().add(4).readPointer(); //ObjectAttributes->ObjectName->Buffer
-        //console.log(this.regKey.readUtf16String());
+        console.log(this.regKey.readUtf16String());
         for (let r of registry_blacklist)
         {
             if (this.regKey.readUtf16String().toLowerCase().includes(r))
             {
-                send("[Registry] NtOpenKeyEx - replaced: " + this.regKey.readUtf16String());
+                send("[Registry] NtOpenKey - replaced: " + this.regKey.readUtf16String());
                 this.regKey.writeUtf16String('meow');
                 console.log(this.regKey.readUtf16String());
             }   
         }
         
-        checkEmulationRegistry(this.regKey, "NtOpenKeyEx", true);
+        checkEmulationRegistry(this.regKey, "NtOpenKey", true);
       },
     });
 
@@ -193,8 +199,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
-            this.keyInfo.isNull() ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             (retval.toInt32() != 0 && retval.toInt32() != 2147483674)) //STATUS_SUCCESS and STATUS_NO_MORE_ENTRIES
             return;
         var to_check;
@@ -203,7 +209,7 @@
             case 0: {
                 var stringOffset = 16;
                 var len = this.keyInfo.add(12).readU32();
-                console.log(len);
+                //console.log(len);
                 to_check = this.keyInfo.add(stringOffset).readPointer().readUtf16String(len);
                 break;
             }
@@ -211,7 +217,7 @@
             case 1: {
                 var stringOffset = 24;
                 var len = this.keyInfo.add(20).readU32();
-                console.log(len);
+                //console.log(len);
                 to_check = this.keyInfo.add(stringOffset).readPointer().readUtf16String(len);
                 break;
             } 
@@ -265,7 +271,7 @@
         //REG_MULTI_SZ
         else if (type === 7)
         {
-            let len = 0;
+            var len = 0;
             while (len < valueLen)
             {
                 let cur_str = value.readUtf16String();
@@ -291,8 +297,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
-            this.keyInfo.isNull() ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             (retval.toInt32() != 0 && retval.toInt32() != 2147483674)) //STATUS_SUCCESS and STATUS_NO_MORE_ENTRIES
             return;
 
@@ -351,6 +357,7 @@
                 return;
         }
         
+        console.log(Name);
         if (handleSuspiciousRegEntry(this.keyInfoClass,this.keyInfo, Type, DataOffset, DataLength, NameLength, Name, NamePtr))
         {
             send("[Registry] NtEnumerateValueKey - replaced: " + Name);
@@ -367,8 +374,8 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
-            this.keyInfo.isNull() ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             (retval.toInt32() != 0 && retval.toInt32() != 3221225524)) //STATUS_SUCCESS and STATUS_OBJECT_NAME_NOT_FOUND
             return;
 
@@ -427,6 +434,7 @@
                 return;
         }
         
+        console.log(Name);
         if (handleSuspiciousRegEntry(this.keyInfoClass,this.keyInfo, Type, DataOffset, DataLength, NameLength, Name, NamePtr))
         {
             send("[Registry] NtQueryValueKey - replaced: " + Name);
@@ -438,80 +446,91 @@
     const RegOpenKeyA = Module.getExportByName('Advapi32.dll', 'RegOpenKeyA');
     Interceptor.attach(RegOpenKeyA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress) || args[1].isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
+            args[1].isNull())
             return;
         this.regKey = args[1]; //LPCSTR lpSubKey
+        console.log(this.regKey.readAnsiString());
         for (let r of registry_blacklist)
         {
             if (this.regKey.readAnsiString().toLowerCase().includes(r))
             {
-                send("[Registry] RegOpenKeyA - replaced: " + this.regKey.readAnsiString());
+                send("[Registry] RegOpenKey - replaced: " + this.regKey.readAnsiString());
                 this.regKey.writeAnsiString('meow');
                 console.log(this.regKey.readAnsiString());
             }   
         }
         
-        checkEmulationRegistry(this.regKey, "RegOpenKeyA", false);
+        checkEmulationRegistry(this.regKey, "RegOpenKey", false);
       },
     });
 
     const RegOpenKeyExA = Module.getExportByName('Advapi32.dll', 'RegOpenKeyExA');
     Interceptor.attach(RegOpenKeyExA, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress) || args[1].isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
+            args[1].isNull())
             return;
         this.regKey = args[1]; //LPCSTR lpSubKey
+        console.log(this.regKey.readAnsiString());
         for (let r of registry_blacklist)
         {
             if (this.regKey.readAnsiString().toLowerCase().includes(r))
             {
-                send("[Registry] RegOpenKeyExA - replaced: " + this.regKey.readAnsiString());
+                send("[Registry] RegOpenKey - replaced: " + this.regKey.readAnsiString());
                 this.regKey.writeAnsiString('meow');
                 console.log(this.regKey.readAnsiString());
             }   
         }
         
-        checkEmulationRegistry(this.regKey, "RegOpenKeyExA", false);
+        checkEmulationRegistry(this.regKey, "RegOpenKey", false);
       },
     });
 
     const RegOpenKeyW = Module.getExportByName('Advapi32.dll', 'RegOpenKeyW');
     Interceptor.attach(RegOpenKeyW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress) || args[1].isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
+            args[1].isNull())
             return;
         this.regKey = args[1]; //LPCWSTR lpSubKey
+        console.log(this.regKey.readUtf16String());
         for (let r of registry_blacklist)
         {
             if (this.regKey.readUtf16String().toLowerCase().includes(r))
             {
-                send("[Registry] RegOpenKeyW - replaced: " + this.regKey.readUtf16String());
+                send("[Registry] RegOpenKey - replaced: " + this.regKey.readUtf16String());
                 this.regKey.writeUtf16String('meow');
                 console.log(this.regKey.readUtf16String());
             }   
         }
         
-        checkEmulationRegistry(this.regKey, "RegOpenKeyW", true);
+        checkEmulationRegistry(this.regKey, "RegOpenKey", true);
       },
     });
 
     const RegOpenKeyExW = Module.getExportByName('Advapi32.dll', 'RegOpenKeyExW');
     Interceptor.attach(RegOpenKeyExW, {
       onEnter(args) {
-        if (!appModules.has(this.returnAddress) || args[1].isNull())
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode))
             return;
         this.regKey = args[1]; //LPCWSTR lpSubKey
+        console.log(this.regKey.readUtf16String());
         for (let r of registry_blacklist)
         {
             if (this.regKey.readUtf16String().toLowerCase().includes(r))
             {
-                send("[Registry] RegOpenKeyExW - replaced: " + this.regKey.readUtf16String());
+                send("[Registry] RegOpenKey - replaced: " + this.regKey.readUtf16String());
                 this.regKey.writeUtf16String('meow');
                 console.log(this.regKey.readUtf16String());
             }   
         }
         
-        checkEmulationRegistry(this.regKey, "RegOpenKeyExW", true);
+        checkEmulationRegistry(this.regKey, "RegOpenKey", true);
       },
     });
 
@@ -522,17 +541,19 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
 
         var to_check = this.keyName.readAnsiString();
+        console.log(to_check);
         for (let r of registry_blacklist)
         {
             if (to_check.toLowerCase().includes(r))
             {
-                send("[Registry] RegEnumKeyA - replaced: " + to_check);
+                send("[Registry] RegEnumKey - replaced: " + to_check);
                 this.keyName.writeAnsiString("meow");
             }
         }
@@ -548,22 +569,24 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
 
         var to_check = this.keyName.readUtf16String();
+        console.log(to_check);
         for (let r of registry_blacklist)
         {
             if (to_check.toLowerCase().includes(r))
             {
-                send("[Registry] RegEnumKeyW - replaced: " + to_check);
+                send("[Registry] RegEnumKey - replaced: " + to_check);
                 this.keyName.writeUtf16String("meow");
             }
         }
 
-        checkEmulationRegistry(this.keyName, "RegEnumKeyW", true);
+        checkEmulationRegistry(this.keyName, "RegEnumKey", true);
       }
     });
 
@@ -574,22 +597,24 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
 
         var to_check = this.keyName.readAnsiString();
+        console.log(to_check);
         for (let r of registry_blacklist)
         {
             if (to_check.toLowerCase().includes(r))
             {
-                send("[Registry] RegEnumKeyExA - replaced: " + to_check);
+                send("[Registry] RegEnumKey - replaced: " + to_check);
                 this.keyName.writeAnsiString("meow");
             }
         }
 
-        checkEmulationRegistry(this.keyName, "RegEnumKeyExA", false);
+        checkEmulationRegistry(this.keyName, "RegEnumKey", false);
       }
     });
 
@@ -600,22 +625,24 @@
       },
 
       onLeave(retval) {
-        if (!appModules.has(this.returnAddress) ||
+        if ((!appModules.has(this.returnAddress) &&
+            onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
 
         var to_check = this.keyName.readUtf16String();
+        console.log(to_check);
         for (let r of registry_blacklist)
         {
             if (to_check.toLowerCase().includes(r))
             {
-                send("[Registry] RegEnumKeyExW - replaced: " + to_check);
+                send("[Registry] RegEnumKey - replaced: " + to_check);
                 this.keyName.writeUtf16String("meow");
             }
         }
 
-        checkEmulationRegistry(this.keyName, "RegEnumKeyExW", true);
+        checkEmulationRegistry(this.keyName, "RegEnumKey", true);
       }
     });
 
