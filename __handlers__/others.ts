@@ -370,17 +370,16 @@
     }
     });
 
+    const NtSuspendThread = Module.getExportByName('ntdll.dll', 'NtSuspendThread');
+    Interceptor.replace(NtSuspendThread, new NativeCallback((hThread) => {send("[Others] NtSuspendThread");return 1;}, 'int32', ['pointer', 'pointer']));
     const SuspendThread = Module.getExportByName('Kernel32.dll', 'SuspendThread');
-    Interceptor.attach(SuspendThread, {
-      onLeave(retval) {
-        send("[Others] SuspendThread");
-        return;
-      },
-    });
+    Interceptor.replace(SuspendThread, new NativeCallback((hThread) => {send("[Others] SuspendThread");return 1;}, 'int32', ['pointer']));
 
     const NtYieldExecution = Module.getExportByName('ntdll.dll', 'NtYieldExecution');
     Interceptor.attach(NtYieldExecution, {
       onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Others] NtYieldExecution");
         retval.replace(ptr(0x40000024)); //return STATUS_NO_YIELD_PERFORMED
       },
@@ -389,6 +388,8 @@
     const NtSetDebugFilterState = Module.getExportByName('ntdll.dll', 'NtSetDebugFilterState');
     Interceptor.attach(NtSetDebugFilterState, {
       onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Others] NtSetDebugFilterState");
         retval.replace(ptr(0xC0000022)); //return STATUS_ACCESS_DENIED
       },

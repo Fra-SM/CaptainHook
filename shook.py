@@ -8,7 +8,7 @@ import subprocess
 import re
 import csv
 
-#list of files containing instrumentation scripts grouped by category
+# list of files containing instrumentation scripts grouped by category
 hooks_files = [
                'stalker.ts', #includes memfing, cpufing, tabdescr and traps
                'stalling.ts',
@@ -28,7 +28,7 @@ hooks_files = [
                'memfing.ts'
 ]
 
-#color mappings for pretty output
+# color mappings for pretty output
 techniques_colors = {
                'Memory Fingerprinting': 1,
                'Stalling': 2,
@@ -122,7 +122,7 @@ def load_hooks(session):
         script.on("message", on_message)
         script.load()
       except:
-        #console.log(f'{hooks_files[i]} must be implemented')
+        console.log(f'Failed to load {hooks_files[i]}')
         pass
 
 def remote_instrumentation(program, host, port):

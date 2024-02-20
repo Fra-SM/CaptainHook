@@ -146,7 +146,7 @@
             {
                 send("[Processes] GetModuleBaseName - process checked: " + this.process);
                 //replace the process' name if blacklisted
-                this.lpBaseName.writeAnsiString('meow');
+                this.lpBaseName.writeAnsiString('explorer.exe');
                 //console.log(this.lpBaseName.readAnsiString());
             }       
         }
@@ -170,7 +170,7 @@
             {
                 send("[Processes] GetModuleBaseName - process checked: " + this.process);
                 //replace the process' name if blacklisted
-                this.lpBaseName.writeUtf16String('meow');
+                this.lpBaseName.writeUtf16String('explorer.exe');
                 //console.log(this.lpBaseName.readUtf16String());
             }       
         }
@@ -193,7 +193,7 @@
             {
                 send("[Processes] Process32First - replaced process: " + this.szName.readCString());
                 //replace the process' name if blacklisted
-                this.szName.writeUtf8String('meow');
+                this.szName.writeUtf8String('explorer.exe');
                 //console.log(this.szName.readUtf8String());
             }       
         }
@@ -216,7 +216,7 @@
             {
                 send("[Processes] Process32First - replaced process: " + this.szName.readUtf16String());
                 //replace the process' name if blacklisted
-                this.szName.writeUtf16String('meow');
+                this.szName.writeUtf16String('explorer.exe');
                 //console.log(this.szName.readUtf16String());
             }       
         }
@@ -239,7 +239,7 @@
             {
                 send("[Processes] Process32Next - replaced process: " + this.szName.readCString());
                 //replace the process' name if blacklisted
-                this.szName.writeUtf8String('meow');
+                this.szName.writeUtf8String('explorer.exe');
                 //console.log(this.szName.readUtf8String());
             }       
         }
@@ -262,7 +262,7 @@
             {
                 send("[Processes] Process32Next - replaced process: " + this.szName.readUtf16String());
                 //replace the process' name if blacklisted
-                this.szName.writeUtf16String('meow');
+                this.szName.writeUtf16String('explorer.exe');
                 //console.log(this.szName.readUtf16String());
             }       
         }

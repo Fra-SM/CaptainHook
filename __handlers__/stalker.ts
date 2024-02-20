@@ -178,7 +178,8 @@
                 if (isAppCode)
                 {
                     let opcode = new Uint8Array(instruction.address.readByteArray(1))[0];
-                    
+                    //console.log(instruction.toString());
+
                     //super slow execution if enabled
                     if (instruction.mnemonic.includes('mov') && memfingChecks)
                         iterator.putCallout(checkMemoryFingerprintingTechniques);

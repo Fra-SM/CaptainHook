@@ -51,7 +51,15 @@
                          "peid",
                          "die",
                          "procdump",
-                         "sandbox"
+                         "sandbox",
+                         "gbdyllo",
+                         "pediy06",
+                         "zeta debugger",
+                         "rock debugger",
+                         "obsidian",
+                         "sunawtframe",
+                         "qt5qwindowicon",
+                         "antidbg"
                         ]
 
     //useful reference for data types sizes: https://learn.microsoft.com/it-it/windows/win32/winprog/windows-data-types
@@ -269,7 +277,6 @@
       }
     });
 
-    //likely false positive
     const IsProcessorFeaturePresent = Module.getExportByName("Kernel32.dll", 'IsProcessorFeaturePresent');
     Interceptor.attach(IsProcessorFeaturePresent, {
       onEnter(args) {
@@ -279,10 +286,10 @@
       onLeave(retval) {
         if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
-        if (this.checkedFeature === 3 || this.checkedFeature === 6 || this.checkedFeature === 17)
+        if (this.checkedFeature === 23) //PE_FASTFAIL_AVAILABLE
         {
-            retval.replace(ptr(1)); //return TRUE
-            send(`[System Environment] IsProcessorFeaturePresent - feature checked: ${this.checkedFeature}`);
+            retval.replace(ptr(1)); //return TRUE - fake supported feature
+            send(`[System Environment] IsProcessorFeaturePresent`);
         }   
       }
     });
@@ -463,6 +470,36 @@
       }
     });
 
+    const GetMonitorInfoA = Module.getExportByName('User32.dll', 'GetMonitorInfoA');
+    Interceptor.attach(GetMonitorInfoA, {
+      onEnter(args) {
+        this.monitorInfo = args[1];
+      },  
+      onLeave() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        send("[System Environment] GetMonitorInfo");
+        //fake top and bottom coordinates
+        this.monitorInfo.readPointer().add(8).writeInt(2000);
+        this.monitorInfo.readPointer().add(16).writeInt(1760);
+      }
+    });
+
+    const GetMonitorInfoW = Module.getExportByName('User32.dll', 'GetMonitorInfoW');
+    Interceptor.attach(GetMonitorInfoW, {
+      onEnter(args) {
+        this.monitorInfo = args[1];
+      },  
+      onLeave() {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        send("[System Environment] GetMonitorInfo");
+        //fake top and bottom coordinates
+        this.monitorInfo.readPointer().add(8).writeInt(2000);
+        this.monitorInfo.readPointer().add(16).writeInt(1760);
+      }
+    });
+
     //DEVMODEA contains variable size members?
     /* const EnumDisplaySettingsA = Module.getExportByName('User32.dll', 'EnumDisplaySettingsA');
     Interceptor.attach(EnumDisplaySettingsA, {
@@ -602,7 +639,7 @@
                     if (processName.includes(p))
                     {
                         send(`[Processes] NtQuerySystemInformation(0x5) - replaced process: ${processName}`);
-                        this.sysInfo.add(NextEntryOffset).add(60).readPointer().writeUtf16String('meow');
+                        this.sysInfo.add(NextEntryOffset).add(60).readPointer().writeUtf16String('explorer.exe');
                     }
                 }
                     
@@ -1002,6 +1039,75 @@
     } catch (error) {
         console.log(error);
     }
+
+    try {
+      const WudfIsAnyDebuggerPresent = Module.getExportByName('WUDFPlatform.dll', 'WudfIsAnyDebuggerPresent');
+      Interceptor.attach(WudfIsAnyDebuggerPresent, {
+        onLeave(retval) {
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+          retval.replace(ptr(0)); //return FALSE
+          send("[System Environment] WudfIsAnyDebuggerPresent");
+        }
+      });
+  
+      const WudfIsUserDebuggerPresent = Module.getExportByName('WUDFPlatform.dll', 'WudfIsUserDebuggerPresent');
+      Interceptor.attach(WudfIsUserDebuggerPresent, {
+        onLeave(retval) {
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+          retval.replace(ptr(0)); //return FALSE
+          send("[System Environment] WudfIsUserDebuggerPresent");
+        }
+      });
+  
+      const WudfIsKernelDebuggerPresent = Module.getExportByName('WUDFPlatform.dll', 'WudfIsKernelDebuggerPresent');
+      Interceptor.attach(WudfIsKernelDebuggerPresent, {
+        onLeave(retval) {
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+          retval.replace(ptr(0)); //return FALSE
+          send("[System Environment] WudfIsKernelDebuggerPresent");
+        }
+      });
+    } catch (error) {
+        console.log(error);
+    }
+
+    //should change only if serial number is “0CD1A40” or “70144646”
+    const GetVolumeInformationA = Module.getExportByName('Kernel32.dll', 'GetVolumeInformationA');
+    Interceptor.attach(GetVolumeInformationA, {
+      onEnter(args) {
+        this.volumeSerialNumber = args[3]; //LPDWORD lpVolumeSerialNumber
+      },  
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        if (this.volumeSerialNumber !== NULL && retval.toInt32() !== 0)
+        {
+          send("[System Environment] GetVolumeInformationA - replaced serial number" + this.volumeSerialNumber.readUInt());
+          this.volumeSerialNumber.writeU32(0xDEADB33F);
+        }
+      }
+    });
+
+    const GetVolumeInformationW = Module.getExportByName('Kernel32.dll', 'GetVolumeInformationW');
+    Interceptor.attach(GetVolumeInformationW, {
+      onEnter(args) {
+        this.volumeSerialNumber = args[3]; //LPDWORD lpVolumeSerialNumber
+      },  
+
+      onLeave(retval) {
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
+        if (this.volumeSerialNumber !== NULL && retval.toInt32() !== 0)
+        {
+          send("[System Environment] GetVolumeInformationW - replaced serial number" + this.volumeSerialNumber.readUInt());
+          this.volumeSerialNumber.writeU32(0xDEADB33F);
+        }
+      }
+    });
 
     /**
      * Called synchronously when about to return from printf.

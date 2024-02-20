@@ -24,6 +24,56 @@
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
     const onlyAppCode = true;
 
+    function handleSuspiciousRegEntry(infoClass, keyInfoStruct, type, dataOffset, dataLength, nameLength, name, namePtr)
+    {
+        console.log(name);
+        for (let r of registry_blacklist)
+            if (name.toLowerCase().includes(r))
+                return true;
+        
+        let value;
+        let valueLen;
+
+        if (infoClass === 1 || infoClass === 3)
+        {
+            value = keyInfoStruct.add(dataOffset);
+            valueLen = dataLength;
+        }
+        else
+        {
+            value = namePtr;
+            valueLen = dataLength;
+        }
+
+        //REG_SZ or REG_EXPAND_SZ
+        if (type === 1 || type === 2)
+            for (let r of registry_blacklist)
+                if (value.readUtf16String(valueLen).toLowerCase().includes(r))
+                {
+                    console.log(value.readUtf16String());
+                    return true;
+                }
+                    
+        //REG_MULTI_SZ
+        else if (type === 7)
+        {
+            var len = 0;
+            while (len < valueLen)
+            {
+                let cur_str = value.readUtf16String();
+                for (let r of registry_blacklist)
+                if (cur_str.toLowerCase().includes(r))
+                {
+                    console.log(cur_str);
+                    return true;
+                }
+                len += cur_str.length;
+            }
+        }
+
+        return false;
+    }
+
     let registry_blacklist = [
         "vbox", //Virtual Box
         "virtualbox",
@@ -46,6 +96,11 @@
         "sandboxie", //Sandboxie
         "sbiedrv",
         "debug",
+        "computername",
+        "image file execution options",
+        "ntice",
+        "sice",
+        "hardware\\description\\system"
     ];
 
     function checkEmulationRegistry(reg, func, isUtf16)
@@ -127,8 +182,7 @@
       onEnter(args) {
         //this prevents also calls happening via the higher level API RegOpenKey to be logged
         //hooks for such higher-level APIs should be defined separately
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) || 
             args[2].isNull())
             return;
         //x32/x64 supported
@@ -153,8 +207,7 @@
       onEnter(args) {
         //this prevents also calls happening via the higher level API RegOpenKey to be logged
         //hooks for such higher-level APIs should be defined separately
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) || 
             args[2].isNull())
             return;
         //x32/x64 supported
@@ -239,55 +292,6 @@
       }
     });
 
-    function handleSuspiciousRegEntry(infoClass, keyInfoStruct, type, dataOffset, dataLength, nameLength, name, namePtr): boolean
-    {
-        for (let r of registry_blacklist)
-            if (name.toLowerCase().includes(r))
-                return true;
-        
-        let value;
-        let valueLen;
-
-        if (infoClass === 1 || infoClass === 3)
-        {
-            value = keyInfoStruct.add(dataOffset);
-            valueLen = dataLength;
-        }
-        else
-        {
-            value = namePtr;
-            valueLen = dataLength;
-        }
-
-        //REG_SZ or REG_EXPAND_SZ
-        if (type === 1 || type === 2)
-            for (let r of registry_blacklist)
-                if (value.readUtf16String(valueLen).toLowerCase().includes(r))
-                {
-                    console.log(value.readUtf16String());
-                    return true;
-                }
-                    
-        //REG_MULTI_SZ
-        else if (type === 7)
-        {
-            var len = 0;
-            while (len < valueLen)
-            {
-                let cur_str = value.readUtf16String();
-                for (let r of registry_blacklist)
-                if (cur_str.toLowerCase().includes(r))
-                {
-                    console.log(cur_str);
-                    return true;
-                }
-                len += cur_str.length;
-            }
-        }
-
-        return false;
-    }
-
     //https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ne-wdm-_key_value_information_class
     const NtEnumerateValueKey = Module.getExportByName('ntdll.dll', 'NtEnumerateValueKey');
     Interceptor.attach(NtEnumerateValueKey, {
@@ -297,8 +301,7 @@
       },
 
       onLeave(retval) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             (retval.toInt32() != 0 && retval.toInt32() != 2147483674)) //STATUS_SUCCESS and STATUS_NO_MORE_ENTRIES
             return;
 
@@ -374,8 +377,7 @@
       },
 
       onLeave(retval) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             (retval.toInt32() != 0 && retval.toInt32() != 3221225524)) //STATUS_SUCCESS and STATUS_OBJECT_NAME_NOT_FOUND
             return;
 
@@ -390,7 +392,7 @@
             case 0: {
                 var stringOffset = 12;
                 NameLength = this.keyInfo.add(8).readU32();
-                Name = this.keyInfo.add(stringOffset).readPointer().readUtf16String(NameLength);
+                Name = this.keyInfo.add(stringOffset).readUtf16String(NameLength);
                 NamePtr = this.keyInfo.add(stringOffset).readPointer();
                 break;
             }
@@ -400,7 +402,7 @@
                 DataOffset = this.keyInfo.add(8).readU32();
                 DataLength = this.keyInfo.add(12).readU32();
                 NameLength = this.keyInfo.add(16).readU32();
-                Name = this.keyInfo.add(stringOffset).readPointer().readUtf16String(NameLength);
+                Name = this.keyInfo.add(stringOffset).readUtf16String(NameLength);
                 NamePtr = this.keyInfo.add(stringOffset).readPointer();
                 break;
             }
@@ -408,7 +410,7 @@
             case 2: {
                 var stringOffset = 12;
                 DataLength = this.keyInfo.add(8).readU32();
-                Name = this.keyInfo.add(stringOffset).readPointer().readUtf16String(DataLength);
+                Name = this.keyInfo.add(stringOffset).readUtf16String(DataLength);
                 NamePtr = this.keyInfo.add(stringOffset).readPointer();
                 break;
             }
@@ -418,7 +420,7 @@
                 DataOffset = this.keyInfo.add(8).readU32();
                 DataLength = this.keyInfo.add(12).readU32();
                 NameLength = this.keyInfo.add(16).readU32();
-                Name = this.keyInfo.add(stringOffset).readPointer().readUtf16String(NameLength);
+                Name = this.keyInfo.add(stringOffset).readUtf16String(NameLength);
                 NamePtr = this.keyInfo.add(stringOffset).readPointer();
                 break;
             }
@@ -426,7 +428,7 @@
             case 4: {
                 var stringOffset = 12;
                 DataLength = this.keyInfo.add(8).readU32();
-                Name = this.keyInfo.add(stringOffset).readPointer().readUtf16String(DataLength);
+                Name = this.keyInfo.add(stringOffset).readUtf16String(DataLength);
                 NamePtr = this.keyInfo.add(stringOffset).readPointer();
                 break;
             }
@@ -446,8 +448,7 @@
     const RegOpenKeyA = Module.getExportByName('Advapi32.dll', 'RegOpenKeyA');
     Interceptor.attach(RegOpenKeyA, {
       onEnter(args) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             args[1].isNull())
             return;
         this.regKey = args[1]; //LPCSTR lpSubKey
@@ -469,8 +470,7 @@
     const RegOpenKeyExA = Module.getExportByName('Advapi32.dll', 'RegOpenKeyExA');
     Interceptor.attach(RegOpenKeyExA, {
       onEnter(args) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             args[1].isNull())
             return;
         this.regKey = args[1]; //LPCSTR lpSubKey
@@ -492,8 +492,7 @@
     const RegOpenKeyW = Module.getExportByName('Advapi32.dll', 'RegOpenKeyW');
     Interceptor.attach(RegOpenKeyW, {
       onEnter(args) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             args[1].isNull())
             return;
         this.regKey = args[1]; //LPCWSTR lpSubKey
@@ -515,8 +514,7 @@
     const RegOpenKeyExW = Module.getExportByName('Advapi32.dll', 'RegOpenKeyExW');
     Interceptor.attach(RegOpenKeyExW, {
       onEnter(args) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode))
+        if ((!appModules.has(this.returnAddress) && onlyAppCode))
             return;
         this.regKey = args[1]; //LPCWSTR lpSubKey
         console.log(this.regKey.readUtf16String());
@@ -541,8 +539,7 @@
       },
 
       onLeave(retval) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
@@ -569,8 +566,7 @@
       },
 
       onLeave(retval) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
@@ -597,8 +593,7 @@
       },
 
       onLeave(retval) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;
@@ -625,8 +620,7 @@
       },
 
       onLeave(retval) {
-        if ((!appModules.has(this.returnAddress) &&
-            onlyAppCode) ||
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             this.keyName.isNull() ||
             retval.toInt32() != 0) //ERROR_SUCCESS
             return;

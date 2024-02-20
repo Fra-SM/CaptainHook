@@ -20,25 +20,30 @@
      * use "this" which is an object for keeping state local to an invocation.
      */
     
-    interface SYSTEMTIME {
-        wYear: number;
-        wMonth: number;
-        wDayOfWeek: number;
-        wDay: number;
-        wHour: number;
-        wMinute: number;
-        wSecond: number;
-        wMilliseconds: number;
-    }
+    let wYearST;
+    let wMonthST;
+    let wDayOfWeekST;
+    let wDayST;
+    let wHourST;
+    let wMinuteST;
+    let wSecondST;
+    let wMillisecondsST;
 
-    interface FILETIME {
-        dwLowDateTime: number;
-        dwHighDateTime: number;
-    }
+    let wYearLT;
+    let wMonthLT;
+    let wDayOfWeekLT;
+    let wDayLT;
+    let wHourLT;
+    let wMinuteLT;
+    let wSecondLT;
+    let wMillisecondsLT;
+
+    let lastdwLowDateTime;
+    let lastdwHighDateTime;
 
     const programPath = Process.enumerateModules()[0].path;
     const appModules = new ModuleMap(m => m.path.startsWith(programPath));
-    const onlyAppCode = false;
+    const onlyAppCode = true;
 
     let LAST_GETTICKCOUNT_UPTIME = 33840000; //9.4 hours uptime
     let GETTICKCOUNT_DELTA = 10;
@@ -59,15 +64,12 @@
     let PERFORMANCE_COUNTER_DELTA = 1;
 
     let GETSYSTEMTIME_CALLED_ONCE = false;
-    let LAST_SYSTEMTIME: SYSTEMTIME;
     let GETSYSTEMTIME_DELTA = 10;
 
     let GETLOCALTIME_CALLED_ONCE = false;
-    let LAST_LOCALTIME: SYSTEMTIME;
     let GETLOCALTIME_DELTA = 10;
 
     let GETSYSTEMTIMEASFILETIME_CALLED_ONCE = false;
-    let LAST_SYSTEMTIMEASFILETIME: FILETIME;
     let GETSYSTEMTIMEASFILETIME_DELTA = 100;
 
     const GetTickCount = Module.getExportByName('Kernel32.dll', 'GetTickCount');
@@ -106,8 +108,8 @@
     const timeGetTime = Module.getExportByName('Winmm.dll', 'timeGetTime');
     Interceptor.attach(timeGetTime, {
       onLeave(retval) {
-        /* if (!appModules.has(this.returnAddress))
-            return; */
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Timing] timeGetTime - original uptime: " + retval.toUInt32());
         retval.replace(ptr(LAST_TIMEGETTIME_UPTIME)); 
         LAST_TIMEGETTIME_UPTIME = LAST_TIMEGETTIME_UPTIME + TIMEGETTIME_DELTA;
@@ -121,8 +123,8 @@
       },
 
       onLeave() {
-        /* if (!appModules.has(this.returnAddress))
-            return; */
+        if (!appModules.has(this.returnAddress) && onlyAppCode)
+            return;
         send("[Timing] timeGetSystemTime - original uptime: " + this.pmmt.add(4).readUInt()); //DWORD ms
         this.pmmt.add(4).writeUInt(LAST_TIMEGETSYSTEMTIME_UPTIME); 
         LAST_TIMEGETSYSTEMTIME_UPTIME = LAST_TIMEGETSYSTEMTIME_UPTIME + TIMEGETSYSTEMTIME_DELTA;
@@ -136,7 +138,7 @@
       },
 
       onLeave(retval) {
-        if (//!appModules.has(this.returnAddress) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) || 
             retval.toInt32() === 0)
             return;
         send("[Timing] QueryUnbiasedInterruptTime - original time: " + this.UnbiasedTime.readULong());
@@ -145,51 +147,56 @@
       }
     });
 
-    //the following 3 functions are available only on Win10+
-    const QueryInterruptTime = Module.getExportByName('Kernel32.dll', 'QueryInterruptTime');
-    Interceptor.attach(QueryInterruptTime, {
-      onEnter(args) {
-        this.lpInterruptTime = args[0]; //PULONGLONG lpInterruptTime
-      },
-
-      onLeave() {
-        /* if (!appModules.has(this.returnAddress))
-            return; */
-        send("[Timing] QueryInterruptTime - original time: " + this.lpInterruptTime.readULong());
-        this.lpInterruptTime.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
-        LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
-      }
-    });
-
-    const QueryInterruptTimePrecise = Module.getExportByName('Kernel32.dll', 'QueryInterruptTimePrecise');
-    Interceptor.attach(QueryInterruptTimePrecise, {
-      onEnter(args) {
-        this.lpInterruptTimePrecise = args[0]; //PULONGLONG lpInterruptTimePrecise
-      },
-
-      onLeave() {
-        /* if (!appModules.has(this.returnAddress))
-            return; */
-        send("[Timing] QueryInterruptTimePrecise - original time: " + this.lpInterruptTimePrecise.readULong());
-        this.lpInterruptTimePrecise.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
-        LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
-      }
-    });
-
-    const QueryUnbiasedInterruptTimePrecise = Module.getExportByName('Kernel32.dll', 'QueryUnbiasedInterruptTimePrecise');
-    Interceptor.attach(QueryUnbiasedInterruptTimePrecise, {
-      onEnter(args) {
-        this.lpUnbiasedInterruptTimePrecise = args[0]; //PULONGLONG lpUnbiasedInterruptTimePrecise
-      },
-
-      onLeave() {
-        /* if (!appModules.has(this.returnAddress))
-            return; */
-        send("[Timing] QueryUnbiasedInterruptTimePrecise - original time: " + this.lpUnbiasedInterruptTimePrecise.readULong());
-        this.lpUnbiasedInterruptTimePrecise.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
-        LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
-      }
-    });
+    
+    try {
+      //the following 3 functions are available only on Win10+
+      const QueryInterruptTime = Module.getExportByName('Kernel32.dll', 'QueryInterruptTime');
+      Interceptor.attach(QueryInterruptTime, {
+        onEnter(args) {
+          this.lpInterruptTime = args[0]; //PULONGLONG lpInterruptTime
+        },
+  
+        onLeave() {
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+          send("[Timing] QueryInterruptTime - original time: " + this.lpInterruptTime.readULong());
+          this.lpInterruptTime.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
+          LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
+        }
+      });
+  
+      const QueryInterruptTimePrecise = Module.getExportByName('Kernel32.dll', 'QueryInterruptTimePrecise');
+      Interceptor.attach(QueryInterruptTimePrecise, {
+        onEnter(args) {
+          this.lpInterruptTimePrecise = args[0]; //PULONGLONG lpInterruptTimePrecise
+        },
+  
+        onLeave() {
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+          send("[Timing] QueryInterruptTimePrecise - original time: " + this.lpInterruptTimePrecise.readULong());
+          this.lpInterruptTimePrecise.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
+          LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
+        }
+      });
+  
+      const QueryUnbiasedInterruptTimePrecise = Module.getExportByName('Kernel32.dll', 'QueryUnbiasedInterruptTimePrecise');
+      Interceptor.attach(QueryUnbiasedInterruptTimePrecise, {
+        onEnter(args) {
+          this.lpUnbiasedInterruptTimePrecise = args[0]; //PULONGLONG lpUnbiasedInterruptTimePrecise
+        },
+  
+        onLeave() {
+          if (!appModules.has(this.returnAddress) && onlyAppCode)
+              return;
+          send("[Timing] QueryUnbiasedInterruptTimePrecise - original time: " + this.lpUnbiasedInterruptTimePrecise.readULong());
+          this.lpUnbiasedInterruptTimePrecise.writeULong(LAST_QUERYINTERRUPTTIME_ALL_VARIANTS);
+          LAST_QUERYINTERRUPTTIME_ALL_VARIANTS = LAST_QUERYINTERRUPTTIME_ALL_VARIANTS + QUERYINTERRUPTTIME_DELTA_ALL_VARIANTS;
+        }
+      });
+    } catch (error) {
+        console.log(error);
+    }
 
     const QueryPerformanceCounter = Module.getExportByName('Kernel32.dll', 'QueryPerformanceCounter');
     Interceptor.attach(QueryPerformanceCounter, {
@@ -198,7 +205,7 @@
       },
 
       onLeave(retval) {
-        if (//!appModules.has(this.returnAddress) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) || 
             retval.toInt32() === 0)
             return;
         var divided_time = this.lpPerformanceCount.readLong();
@@ -217,7 +224,7 @@
       },
 
       onLeave(retval) {
-        if (//!appModules.has(this.returnAddress) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) || 
             retval.toInt32() !== 0)
             return;
         var divided_time = this.PerformanceCounter.readLong();
@@ -246,31 +253,31 @@
       },
 
       onLeave() {
-        if (//!appModules.has(this.returnAddress) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             this.lpSystemTime.isNull())
             return;
-        if (GETSYSTEMTIME_CALLED_ONCE)
+        if (!GETSYSTEMTIME_CALLED_ONCE)
         {
             GETSYSTEMTIME_CALLED_ONCE = true;
-            LAST_SYSTEMTIME.wYear = this.lpSystemTime.readUShort();
-            LAST_SYSTEMTIME.wMonth = this.lpSystemTime.add(2).readUShort();
-            LAST_SYSTEMTIME.wDayOfWeek = this.lpSystemTime.add(4).readUShort();
-            LAST_SYSTEMTIME.wDay = this.lpSystemTime.add(6).readUShort();
-            LAST_SYSTEMTIME.wHour = this.lpSystemTime.add(8).readUShort();
-            LAST_SYSTEMTIME.wMinute = this.lpSystemTime.add(10).readUShort();
-            LAST_SYSTEMTIME.wSecond = this.lpSystemTime.add(12).readUShort();
-            LAST_SYSTEMTIME.wMilliseconds = this.lpSystemTime.add(14).readUShort();
+            wYearST = this.lpSystemTime.readUShort();
+            wMonthST = this.lpSystemTime.add(2).readUShort();
+            wDayOfWeekST = this.lpSystemTime.add(4).readUShort();
+            wDayST = this.lpSystemTime.add(6).readUShort();
+            wHourST= this.lpSystemTime.add(8).readUShort();
+            wMinuteST = this.lpSystemTime.add(10).readUShort();
+            wSecondST = this.lpSystemTime.add(12).readUShort();
+            wMillisecondsST = this.lpSystemTime.add(14).readUShort();
         }
         else
         {
-            this.lpSystemTime.writeUShort(LAST_SYSTEMTIME.wYear);
-            this.lpSystemTime.add(2).writeUShort(LAST_SYSTEMTIME.wMonth);
-            this.lpSystemTime.add(4).writeUShort(LAST_SYSTEMTIME.wDayOfWeek);
-            this.lpSystemTime.add(6).writeUShort(LAST_SYSTEMTIME.wDay);
-            this.lpSystemTime.add(8).writeUShort(LAST_SYSTEMTIME.wHour);
-            this.lpSystemTime.add(10).writeUShort(LAST_SYSTEMTIME.wMinute);
-            this.lpSystemTime.add(12).writeUShort(LAST_SYSTEMTIME.wSecond);
-            this.lpSystemTime.add(14).writeUShort(LAST_SYSTEMTIME.wMilliseconds + GETSYSTEMTIME_DELTA);
+            this.lpSystemTime.writeUShort(wYearST);
+            this.lpSystemTime.add(2).writeUShort(wMonthST);
+            this.lpSystemTime.add(4).writeUShort(wDayOfWeekST);
+            this.lpSystemTime.add(6).writeUShort(wDayST);
+            this.lpSystemTime.add(8).writeUShort(wHourST);
+            this.lpSystemTime.add(10).writeUShort(wMinuteST);
+            this.lpSystemTime.add(12).writeUShort(wSecondST);
+            this.lpSystemTime.add(14).writeUShort(wMillisecondsST + GETSYSTEMTIME_DELTA);
         }
         
         send("[Timing] GetSystemTime");
@@ -284,31 +291,31 @@
       },
 
       onLeave() {
-        if (//!appModules.has(this.returnAddress) || 
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
             this.lpSystemTime.isNull())
             return;
-        if (GETLOCALTIME_CALLED_ONCE)
+        if (!GETLOCALTIME_CALLED_ONCE)
         {
             GETLOCALTIME_CALLED_ONCE = true;
-            LAST_LOCALTIME.wYear = this.lpSystemTime.readUShort();
-            LAST_LOCALTIME.wMonth = this.lpSystemTime.add(2).readUShort();
-            LAST_LOCALTIME.wDayOfWeek = this.lpSystemTime.add(4).readUShort();
-            LAST_LOCALTIME.wDay = this.lpSystemTime.add(6).readUShort();
-            LAST_LOCALTIME.wHour = this.lpSystemTime.add(8).readUShort();
-            LAST_LOCALTIME.wMinute = this.lpSystemTime.add(10).readUShort();
-            LAST_LOCALTIME.wSecond = this.lpSystemTime.add(12).readUShort();
-            LAST_LOCALTIME.wMilliseconds = this.lpSystemTime.add(14).readUShort();
+            wYearLT = this.lpSystemTime.readUShort();
+            wMonthLT = this.lpSystemTime.add(2).readUShort();
+            wDayOfWeekLT = this.lpSystemTime.add(4).readUShort();
+            wDayLT = this.lpSystemTime.add(6).readUShort();
+            wHourLT = this.lpSystemTime.add(8).readUShort();
+            wMinuteLT = this.lpSystemTime.add(10).readUShort();
+            wSecondLT = this.lpSystemTime.add(12).readUShort();
+            wMillisecondsLT = this.lpSystemTime.add(14).readUShort();
         }
         else
         {
-            this.lpSystemTime.writeUShort(LAST_LOCALTIME.wYear);
-            this.lpSystemTime.add(2).writeUShort(LAST_LOCALTIME.wMonth);
-            this.lpSystemTime.add(4).writeUShort(LAST_LOCALTIME.wDayOfWeek);
-            this.lpSystemTime.add(6).writeUShort(LAST_LOCALTIME.wDay);
-            this.lpSystemTime.add(8).writeUShort(LAST_LOCALTIME.wHour);
-            this.lpSystemTime.add(10).writeUShort(LAST_LOCALTIME.wMinute);
-            this.lpSystemTime.add(12).writeUShort(LAST_LOCALTIME.wSecond);
-            this.lpSystemTime.add(14).writeUShort(LAST_LOCALTIME.wMilliseconds + GETLOCALTIME_DELTA);
+            this.lpSystemTime.writeUShort(wYearLT);
+            this.lpSystemTime.add(2).writeUShort(wMonthLT);
+            this.lpSystemTime.add(4).writeUShort(wDayOfWeekLT);
+            this.lpSystemTime.add(6).writeUShort(wDayLT);
+            this.lpSystemTime.add(8).writeUShort(wHourLT);
+            this.lpSystemTime.add(10).writeUShort(wMinuteLT);
+            this.lpSystemTime.add(12).writeUShort(wSecondLT);
+            this.lpSystemTime.add(14).writeUShort(wMillisecondsLT + GETLOCALTIME_DELTA);
         }
         
         send("[Timing] GetLocalTime");
@@ -319,28 +326,29 @@
         DWORD dwLowDateTime;
         DWORD dwHighDateTime;
       } FILETIME, *PFILETIME, *LPFILETIME; */
-    const GetSystemTimeAsFiletime = Module.getExportByName('Kernel32.dll', 'GetSystemTimeAsFiletime');
-    Interceptor.attach(GetSystemTimeAsFiletime, {
+    const GetSystemTimeAsFileTime = Module.getExportByName('Kernel32.dll', 'GetSystemTimeAsFileTime');
+    Interceptor.attach(GetSystemTimeAsFileTime, {
     onEnter(args) {
         this.lpSystemTimeAsFileTime = args[0]; //LPFILETIME lpSystemTimeAsFileTime
     },
 
     onLeave() {
-        /* if (!appModules.has(this.returnAddress))
-            return; */
-        if (GETSYSTEMTIMEASFILETIME_CALLED_ONCE)
+        if ((!appModules.has(this.returnAddress) && onlyAppCode) ||
+            this.lpSystemTimeAsFileTime.isNull())
+            return;
+        if (!GETSYSTEMTIMEASFILETIME_CALLED_ONCE)
         {
             GETSYSTEMTIMEASFILETIME_CALLED_ONCE = true;
-            LAST_SYSTEMTIMEASFILETIME.dwLowDateTime = this.lpSystemTimeAsFileTime.readUInt();
-            LAST_SYSTEMTIMEASFILETIME.dwHighDateTime = this.lpSystemTimeAsFileTime.add(4).readUInt();
+            lastdwLowDateTime = this.lpSystemTimeAsFileTime.readUInt();
+            lastdwHighDateTime = this.lpSystemTimeAsFileTime.add(4).readUInt();
         }
         else
         {
-            this.lpSystemTimeAsFileTime.writeUInt(LAST_SYSTEMTIMEASFILETIME.dwLowDateTime + GETSYSTEMTIMEASFILETIME_DELTA);
-            this.lpSystemTimeAsFileTime.add(4).writeUInt(LAST_SYSTEMTIMEASFILETIME.dwHighDateTime);
+            this.lpSystemTimeAsFileTime.writeUInt(lastdwLowDateTime + GETSYSTEMTIMEASFILETIME_DELTA);
+            //this.lpSystemTimeAsFileTime.add(4).writeUInt(lastdwHighDateTime);
         }
         
-        send("[Timing] GetSystemTimeAsFiletime");
+        send("[Timing] GetSystemTimeAsFileTime");
     }
     });
     

@@ -6,9 +6,9 @@ A tool that makes use of [Frida](https://frida.re/) API hooking and code tracing
 
 ## Installation
 
+Run the following command from the installation directory:
+
 ```sh
-git clone CHANGE-THIS
-cd CHANGE-THIS
 pip install -r requirements.txt
 ```
 
