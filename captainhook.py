@@ -179,7 +179,7 @@ def local_instrumentation(program):
 if __name__ == "__main__":
     console = Console()
 
-    parser = argparse.ArgumentParser(prog='SHook!',
+    parser = argparse.ArgumentParser(prog='CaptainHook',
                                      description='Run a program with a bunch of hooks')
 
     parser.add_argument('-f', '--program', required=True, help='the path to the program you want to instrument')
@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    textArt = art.text2art('SHook!')
+    textArt = art.text2art('CaptainHook')
     subprocess.run(["lolcat -p 2"], shell=True, input=textArt, text=True)
 
     if (args.save != None):

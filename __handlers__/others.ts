@@ -381,7 +381,7 @@
         if (!appModules.has(this.returnAddress) && onlyAppCode)
             return;
         send("[Others] NtYieldExecution");
-        retval.replace(ptr(0x40000024)); //return STATUS_NO_YIELD_PERFORMED
+        retval.replace(ptr(0xC0000022)); //return STATUS_ACCESS_DENIED
       },
     });
 
