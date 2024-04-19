@@ -1,4 +1,4 @@
-# Shook!
+# CaptainHook
 
 A tool that makes use of [Frida](https://frida.re/) API hooking and code tracing functionalities to try to detect and in most cases bypass many of the evasive techniques, such as Anti-VM or Anti-Debugging techniques, commonly used by Windows malware or software protectors. This tool was developed as part of my Master's Thesis project with the aim of studying the usage of evasive techniques among commercial packers/protectors.
 
@@ -14,7 +14,7 @@ pip install -r requirements.txt
 
 ### Usage
 
-Run `python3 shook.py -h` for help.
+Run `python3 captainhook.py -h` for help.
 
 #### Development
 
