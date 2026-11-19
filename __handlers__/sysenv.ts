@@ -580,6 +580,7 @@
         "windbg",					 // Microsoft WinDbg
         "joebox",                    // Joe Sandbox
         "resourcehacker",			 // Resource Hacker
+        // Alternative: Resource Cracker https://www.pelock.com/products/resource-cracker
         "x32dbg",					 // x32dbg
         "x64dbg",					 // x64dbg
         "fiddler",					 // Fiddler
